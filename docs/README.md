@@ -9,16 +9,19 @@ Welcome to the Claude Relay Service documentation! This directory contains all p
 - [API Reference](guides/api-reference.md) - Complete API documentation
 - [Deployment Guide](guides/deployment.md) - Production deployment instructions
 - [Debugging Guide](guides/debugging.md) - Troubleshooting and debugging tips
+- [Troubleshooting Guide](guides/troubleshooting.md) - Common issues and solutions
 
 ### Architecture & Technical Documentation
 - [Architecture Overview](architecture/overview.md) - System architecture and design
 - [API Interfaces](architecture/interfaces.md) - Interface specifications
 - [Security](architecture/security.md) - Security audit and best practices
 - [Testing](architecture/testing.md) - Comprehensive testing documentation
+- [Redis Data Schema](architecture/redis-schema.md) - Redis key patterns and data structures
 
 ### Development
 - [Contributing](development/contributing.md) - How to contribute to this project
 - [Roadmap](development/roadmap.md) - Project roadmap and future plans
+- [CLI Usage Guide](development/cli-usage.md) - Command-line tools reference
 - [Troubleshooting](development/troubleshooting/)
   - [Environment Setup](development/troubleshooting/environment.md)
 
@@ -52,7 +55,9 @@ docs/
 - **Deployment**: Check [Deployment Guide](guides/deployment.md)
 - **Development**: Review [Contributing](development/contributing.md) and [Roadmap](development/roadmap.md)
 - **Testing**: Check [Testing Documentation](architecture/testing.md)
-- **Troubleshooting**: Browse [Development > Troubleshooting](development/troubleshooting/)
+- **Troubleshooting**: See [Troubleshooting Guide](guides/troubleshooting.md)
+- **CLI Tools**: Reference [CLI Usage Guide](development/cli-usage.md)
+- **Redis Schema**: Understand data structures in [Redis Schema](architecture/redis-schema.md)
 - **Historical Context**: Explore [Archives](archive/)
 
 ## 📝 Documentation Standards
@@ -68,6 +73,13 @@ docs/
 See [Contributing Guide](development/contributing.md) for information on improving documentation.
 
 ## 📜 Changelog
+
+**2025-11-01 - Phase 5 CLAUDE.md Optimization:**
+- Extracted [Troubleshooting Guide](guides/troubleshooting.md) from CLAUDE.md (410 lines)
+- Extracted [CLI Usage Guide](development/cli-usage.md) from CLAUDE.md (645 lines)
+- Extracted [Redis Schema](architecture/redis-schema.md) from CLAUDE.md (915 lines)
+- Streamlined CLAUDE.md from 614 to 507 lines (17% reduction)
+- Added comprehensive documentation index to CLAUDE.md
 
 **2025-11-01 - Phase 4 Documentation Consolidation:**
 - Merged 3 quickstart guides into single comprehensive [Quick Start](guides/quickstart.md)

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use axum::{routing::get, Router};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
+use tower_http::services::ServeDir;
 use tracing::{error, info};
 
 use claude_relay::routes::{
@@ -200,6 +201,13 @@ async fn main() -> Result<()> {
         unified_openai_scheduler,
     };
 
+    // Setup static file serving for Vue SPA
+    let static_dir = PathBuf::from("../web/admin-spa/dist");
+    let serve_dir = ServeDir::new(&static_dir)
+        .not_found_service(ServeDir::new(&static_dir).append_index_html_on_directories(true));
+
+    info!("📁 Static files serving from: {}", static_dir.display());
+
     // Build router
     let app = Router::new()
         .route("/health", get(health_check))
@@ -209,7 +217,8 @@ async fn main() -> Result<()> {
         .nest("/web", create_admin_routes(admin_service)) // For frontend compatibility
         .nest("/", create_api_router(api_state))
         .nest("/", create_gemini_router(gemini_state))
-        .nest("/openai", create_openai_router(openai_state));
+        .nest("/openai", create_openai_router(openai_state))
+        .nest_service("/admin-next", serve_dir); // Serve Vue SPA
 
     // Get bind address
     let bind_addr = settings.bind_address();
