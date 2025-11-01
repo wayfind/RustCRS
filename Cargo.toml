@@ -1,0 +1,19 @@
+[workspace]
+members = ["rust"]
+resolver = "2"
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+authors = ["Claude Relay Contributors"]
+license = "MIT"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

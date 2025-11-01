@@ -1,0 +1,136 @@
+version: '3.8'
+
+# Claude Relay Service Docker Compose 配置
+# 所有配置通过环境变量设置，无需映射 .env 文件
+
+services:
+  # 🚀 Claude Relay Service (Rust)
+  claude-relay:
+    # 使用方式:
+    # 1. 本地构建: 使用 build: . (推荐开发环境)
+    # 2. 使用镜像: 设置 DOCKER_IMAGE 环境变量或取消下面注释
+    #    export DOCKER_IMAGE=ghcr.io/<your-username>/claude-relay-service:latest
+    #    或 export DOCKER_IMAGE=<your-dockerhub-username>/claude-relay-service:latest
+    build: .
+    # image: ${DOCKER_IMAGE:-ghcr.io/your-username/claude-relay-service:latest}
+    restart: unless-stopped
+    ports:
+      # Rust 后端默认端口 8080
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8080}:8080"
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      # 🔒 SSL 证书挂载 (启用独立 HTTPS 时需要)
+      - ./certs:/app/certs:ro
+    environment:
+      # 🌐 服务器配置 (Rust 格式使用 CRS_ 前缀)
+      - CRS_SERVER__HOST=0.0.0.0
+      - CRS_SERVER__PORT=8080
+
+      # 🔐 安全配置（必填）
+      - CRS_SECURITY__JWT_SECRET=${JWT_SECRET}  # 必填：至少32字符的随机字符串
+      - CRS_SECURITY__ENCRYPTION_KEY=${ENCRYPTION_KEY}  # 必填：32字符的加密密钥
+
+      # 📊 Redis 配置
+      - CRS_REDIS__HOST=redis
+      - CRS_REDIS__PORT=6379
+      - CRS_REDIS__PASSWORD=${REDIS_PASSWORD:-}
+      - CRS_REDIS__DB=${REDIS_DB:-0}
+
+      # 📝 日志配置
+      - CRS_LOGGING__LEVEL=${LOG_LEVEL:-info}
+      - CRS_LOGGING__FORMAT=pretty
+      - RUST_LOG=${RUST_LOG:-info}
+    depends_on:
+      - redis
+    networks:
+      - claude-relay-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 📊 Redis Database
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # 仅在容器网络内部暴露端口，不映射到主机
+    expose:
+      - "6379"
+    # 注意：如需本地调试访问，可取消下行注释（生产环境禁用）
+    # ports:
+          - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./redis_data:/data
+    command: redis-server --save 60 1 --appendonly yes --appendfsync everysec
+    networks:
+      - claude-relay-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 📈 Redis Monitoring (Optional)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${REDIS_WEB_PORT:-8081}:8081"
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - claude-relay-network
+    profiles:
+      - monitoring
+
+  # 📊 Application Monitoring (Optional)
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - claude-relay-network
+    profiles:
+      - monitoring
+
+  # 📈 Grafana Dashboard (Optional)
+  grafana:
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3001}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin123}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    networks:
+      - claude-relay-network
+    profiles:
+      - monitoring
+
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  claude-relay-network:
+    driver: bridge
