@@ -76,9 +76,9 @@ rust_bench_loc=$(count_loc_by_path "./rust/benches" -name '*.rs')
 frontend_count=$(count_files_by_path "./web/admin-spa/src" \( -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \))
 frontend_loc=$(count_loc_by_path "./web/admin-spa/src" \( -name '*.vue' -o -name '*.js' -o -name '*.ts' -o -name '*.jsx' -o -name '*.tsx' \))
 
-# Configuration files
-config_count=$(count_files_by_path "." \( -name 'Cargo.toml' -o -name '*.yml' -o -name '*.yaml' -o -name 'Makefile' -o -name '.prettierrc' -o -name '.eslintrc.cjs' \))
-config_loc=$(count_loc_by_path "." \( -name 'Cargo.toml' -o -name '*.yml' -o -name '*.yaml' -o -name 'Makefile' -o -name '.prettierrc' -o -name '.eslintrc.cjs' \))
+# Configuration files (手写的配置，排除自动生成的 lock 文件和归档代码)
+config_count=$(find . -type f \( -name 'Cargo.toml' -o -name '*.yml' -o -name '*.yaml' -o -name 'Makefile' -o -name '.prettierrc' -o -name '.eslintrc.cjs' -o -name 'package.json' \) ! -path '*/node_modules/*' ! -path '*/target/*' ! -path '*/nodejs-archive/*' ! -name 'package-lock.json' ! -name 'Cargo.lock' 2>/dev/null | wc -l | tr -d ' ')
+config_loc=$(find . -type f \( -name 'Cargo.toml' -o -name '*.yml' -o -name '*.yaml' -o -name 'Makefile' -o -name '.prettierrc' -o -name '.eslintrc.cjs' -o -name 'package.json' \) ! -path '*/node_modules/*' ! -path '*/target/*' ! -path '*/nodejs-archive/*' ! -name 'package-lock.json' ! -name 'Cargo.lock' -exec cat {} \; 2>/dev/null | wc -l)
 
 # Documentation (excluding node_modules, target, archived)
 docs_count=$(find . -name '*.md' -type f ! -path '*/node_modules/*' ! -path '*/target/*' ! -path '*/nodejs-archive/*' 2>/dev/null | wc -l | tr -d ' ')
@@ -93,23 +93,7 @@ total_active_files=$((rust_backend_count + rust_test_count + rust_bench_count + 
 total_active_loc=$((rust_backend_loc + rust_test_loc + rust_bench_loc + frontend_loc + config_loc + scripts_loc))
 
 # ============================================
-# SECTION 2: Archived Node.js Backend
-# ============================================
-
-archived_backend_count=$(count_files_by_path "./nodejs-archive/src" -name '*.js')
-archived_backend_loc=$(count_loc_by_path "./nodejs-archive/src" -name '*.js')
-
-archived_routes_count=$(count_files_by_path "./nodejs-archive/routes" -name '*.js')
-archived_routes_loc=$(count_loc_by_path "./nodejs-archive/routes" -name '*.js')
-
-archived_middleware_count=$(count_files_by_path "./nodejs-archive/middleware" -name '*.js')
-archived_middleware_loc=$(count_loc_by_path "./nodejs-archive/middleware" -name '*.js')
-
-total_archived_files=$((archived_backend_count + archived_routes_count + archived_middleware_count))
-total_archived_loc=$((archived_backend_loc + archived_routes_loc + archived_middleware_loc))
-
-# ============================================
-# SECTION 3: Summary Table
+# SECTION 2: Summary Table
 # ============================================
 
 echo "### 📈 Summary"
@@ -211,30 +195,6 @@ if [ "$rust_test_count" -gt 0 ]; then
         rel_path="${file#./}"
         echo "- \`$rel_path\` ($lines lines)"
     done
-    echo ""
-fi
-
-# ============================================
-# SECTION 6: Migration Progress (if archived code exists)
-# ============================================
-
-if [ "$total_archived_files" -gt 0 ]; then
-    echo "### 🏗️ Migration Progress (Node.js → Rust)"
-    echo ""
-    echo "| Codebase | Files | Lines | Status |"
-    echo "|----------|-------|-------|--------|"
-    echo "| **Active (Rust)** | $total_active_files | $(printf "%'d" $total_active_loc) | ✅ Current |"
-    echo "| **Archived (Node.js)** | $total_archived_files | $(printf "%'d" $total_archived_loc) | 📦 Deprecated |"
-
-    # Calculate migration percentage (based on LOC)
-    total_combined_loc=$((total_active_loc + total_archived_loc))
-    if [ "$total_combined_loc" -gt 0 ]; then
-        migration_pct=$(calc_percentage $total_active_loc $total_combined_loc)
-        echo "| **Migration** | - | - | **🎯 ${migration_pct}% complete** |"
-    fi
-
-    echo ""
-    echo "**Analysis**: The Rust backend ($total_active_files files, $(printf "%'d" $total_active_loc) LOC) has replaced the archived Node.js backend ($total_archived_files files, $(printf "%'d" $total_archived_loc) LOC)."
     echo ""
 fi
 
