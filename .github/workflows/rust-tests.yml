@@ -106,6 +106,46 @@ jobs:
       with:
         toolchain: ${{ matrix.rust }}
 
-    - name: Build project
+    - name: Setup Node.js for frontend
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: web/admin-spa/package-lock.json
+
+    - name: Build Frontend
+      run: |
+        echo "Building frontend assets..."
+        cd web/admin-spa
+        npm ci
+        npm run build
+        ls -lh dist/
+        echo "Frontend build completed"
+
+    - name: Build Rust project
       working-directory: ./rust
-      run: cargo build --release --all-features
+      run: |
+        echo "Building Rust backend..."
+        cargo build --release --all-features
+        ls -lh target/release/
+        echo "Rust build completed"
+
+    - name: Verify static file serving setup
+      run: |
+        echo "Verifying static file paths..."
+        if [ -d "web/admin-spa/dist" ]; then
+          echo "✅ Frontend dist directory exists"
+          echo "Contents:"
+          ls -lh web/admin-spa/dist/
+        else
+          echo "❌ Frontend dist directory missing!"
+          exit 1
+        fi
+
+        if [ -f "rust/target/release/claude-relay" ]; then
+          echo "✅ Rust binary exists"
+          file rust/target/release/claude-relay
+        else
+          echo "❌ Rust binary missing!"
+          exit 1
+        fi
