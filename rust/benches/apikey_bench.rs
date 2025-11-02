@@ -6,15 +6,14 @@ use claude_relay::models::api_key::{ApiKeyCreateOptions, ApiKeyPermissions, Expi
 use claude_relay::services::ApiKeyService;
 use claude_relay::{RedisPool, Settings};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use std::sync::Arc;
 
 /// 创建测试用的 ApiKeyService
 async fn create_test_service() -> ApiKeyService {
-    // 使用内存配置（不连接实际 Redis）
-    let settings = Settings::default();
-    let pool = RedisPool::default();
+    // 加载配置
+    let settings = Settings::new().expect("Failed to load settings");
+    let pool = RedisPool::new(&settings).expect("Failed to create Redis pool");
 
-    ApiKeyService::new(Arc::new(pool), settings.security.encryption_key.clone())
+    ApiKeyService::new(pool, settings)
 }
 
 /// Benchmark API Key creation
@@ -23,21 +22,48 @@ fn bench_key_creation(c: &mut Criterion) {
     let service = rt.block_on(create_test_service());
 
     c.bench_function("create_api_key", |b| {
-        b.to_async(&rt).iter(|| async {
-            let options = ApiKeyCreateOptions {
-                name: "benchmark-key".to_string(),
-                rate_limit: Some(1000),
-                permissions: Some(ApiKeyPermissions::all()),
-                expiration: ExpirationMode::NoExpiration,
-                cost_limit: None,
-                model_blacklist: None,
-                client_restrictions: None,
-            };
+        b.iter(|| {
+            rt.block_on(async {
+                let options = ApiKeyCreateOptions {
+                    name: "benchmark-key".to_string(),
+                    description: None,
+                    icon: None,
+                    permissions: ApiKeyPermissions::All,
+                    is_active: true,
+                    token_limit: 0,
+                    concurrency_limit: 0,
+                    rate_limit_window: None,
+                    rate_limit_requests: Some(1000),
+                    rate_limit_cost: None,
+                    daily_cost_limit: 0.0,
+                    total_cost_limit: 0.0,
+                    weekly_opus_cost_limit: 0.0,
+                    enable_model_restriction: false,
+                    restricted_models: vec![],
+                    enable_client_restriction: false,
+                    allowed_clients: vec![],
+                    tags: vec![],
+                    expiration_mode: ExpirationMode::Fixed,
+                    activation_days: 0,
+                    activation_unit: Default::default(),
+                    expires_at: None,
+                    claude_account_id: None,
+                    claude_console_account_id: None,
+                    gemini_account_id: None,
+                    openai_account_id: None,
+                    azure_openai_account_id: None,
+                    bedrock_account_id: None,
+                    droid_account_id: None,
+                    user_id: None,
+                    created_by: None,
+                    created_by_type: None,
+                };
 
-            service
-                .create_key(black_box(options), "benchmark")
-                .await
-                .expect("Failed to create key")
+                service
+                    .generate_key(black_box(options))
+                    .await
+                    .expect("Failed to create key")
+            })
         });
     });
 }
@@ -48,29 +74,56 @@ fn bench_key_validation(c: &mut Criterion) {
     let service = rt.block_on(create_test_service());
 
     // 预先创建一个 key
-    let api_key = rt.block_on(async {
+    let (api_key, _) = rt.block_on(async {
         let options = ApiKeyCreateOptions {
             name: "validation-bench-key".to_string(),
-            rate_limit: Some(1000),
-            permissions: Some(ApiKeyPermissions::all()),
-            expiration: ExpirationMode::NoExpiration,
-            cost_limit: None,
-            model_blacklist: None,
-            client_restrictions: None,
+            description: None,
+            icon: None,
+            permissions: ApiKeyPermissions::All,
+            is_active: true,
+            token_limit: 0,
+            concurrency_limit: 0,
+            rate_limit_window: None,
+            rate_limit_requests: Some(1000),
+            rate_limit_cost: None,
+            daily_cost_limit: 0.0,
+            total_cost_limit: 0.0,
+            weekly_opus_cost_limit: 0.0,
+            enable_model_restriction: false,
+            restricted_models: vec![],
+            enable_client_restriction: false,
+            allowed_clients: vec![],
+            tags: vec![],
+            expiration_mode: ExpirationMode::Fixed,
+            activation_days: 0,
+            activation_unit: Default::default(),
+            expires_at: None,
+            claude_account_id: None,
+            claude_console_account_id: None,
+            gemini_account_id: None,
+            openai_account_id: None,
+            azure_openai_account_id: None,
+            bedrock_account_id: None,
+            droid_account_id: None,
+            user_id: None,
+            created_by: None,
+            created_by_type: None,
         };
 
         service
-            .create_key(options, "benchmark")
+            .generate_key(options)
             .await
             .expect("Failed to create key")
     });
 
     c.bench_function("validate_api_key", |b| {
-        b.to_async(&rt).iter(|| async {
-            service
-                .validate_key(black_box(&api_key))
-                .await
-                .expect("Validation failed")
+        b.iter(|| {
+            rt.block_on(async {
+                service
+                    .validate_key(black_box(&api_key))
+                    .await
+                    .expect("Validation failed")
+            })
         });
     });
 }
