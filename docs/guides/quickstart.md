@@ -163,7 +163,9 @@ npm install
 npm run dev
 ```
 
-Vite will automatically open browser at `http://localhost:3001`
+Vite will automatically open browser at `http://localhost:3001` (开发模式)
+
+**注意**: 在生产环境，静态文件由 Rust 后端直接提供服务，访问 `http://localhost:8080` 即可（根路径自动跳转到 `/admin-next`）
 
 ---
 
@@ -186,7 +188,11 @@ curl http://localhost:8080/health
 
 ### Frontend Access
 
-Open browser: **http://localhost:3001**
+**开发模式**: Open browser: **http://localhost:3001** (Vite 开发服务器)
+
+**生产环境**: Open browser: **http://localhost:8080** (Rust 后端提供静态文件服务)
+- 访问根路径 `/` 会自动跳转到 `/admin-next`
+- 可直接访问 `http://localhost:8080/admin-next`
 
 You should see the Claude Relay Service admin interface.
 
@@ -247,7 +253,9 @@ bash rust-dev.sh       # Interactive
 
 ## 🎨 Using the Admin Interface
 
-Visit `http://localhost:3001` to access the admin interface.
+**访问方式**:
+- **开发模式**: `http://localhost:3001` (Vite 开发服务器，支持热重载)
+- **生产环境**: `http://localhost:8080` 或 `http://localhost:8080/admin-next` (Rust 后端提供静态文件服务)
 
 ### 1. Login to Admin Interface
 

@@ -1,5 +1,9 @@
 use anyhow::Result;
-use axum::{routing::get, Router};
+use axum::{
+    response::{IntoResponse, Redirect},
+    routing::get,
+    Router,
+};
 use std::{path::PathBuf, sync::Arc};
 use tower_http::services::ServeDir;
 use tracing::{error, info};
@@ -210,13 +214,15 @@ async fn main() -> Result<()> {
 
     // Build router
     let app = Router::new()
+        .route("/", get(|| async { Redirect::permanent("/admin-next") })) // Redirect root to admin
         .route("/health", get(health_check))
         .route("/ping", get(ping))
         .with_state(health_state)
         .nest("/admin", create_admin_routes(admin_service.clone()))
         .nest("/web", create_admin_routes(admin_service)) // For frontend compatibility
-        .nest("/", create_api_router(api_state))
-        .nest("/", create_gemini_router(gemini_state))
+        .nest("/api", create_api_router(api_state.clone()))
+        .nest("/claude", create_api_router(api_state))
+        .nest("/gemini", create_gemini_router(gemini_state))
         .nest("/openai", create_openai_router(openai_state))
         .nest_service("/admin-next", serve_dir); // Serve Vue SPA
 
