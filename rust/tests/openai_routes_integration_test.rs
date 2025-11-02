@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // OpenAI Routes Integration Tests
 //
 // 测试 OpenAI API 路由层的所有端点
@@ -174,7 +175,15 @@ async fn test_usage_endpoint() {
 
     // Record some usage
     ctx.service
-        .record_usage(&api_key.id, "code-davinci-002", 100, 50, 0, 0, 0.01)
+        .record_usage(UsageRecord::new(
+                api_key.id.clone(),
+                "code-davinci-002".to_string(),
+                100,
+                50,
+                0,
+                0,
+                0.01,
+            ))
         .await
         .unwrap();
 

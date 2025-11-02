@@ -120,8 +120,8 @@ pub fn remove_bedrock_region_prefix(model_name: &str) -> String {
     let regions = ["us.", "eu.", "apac.", "ap-", "ca-"];
 
     for region in &regions {
-        if model_name.starts_with(region) {
-            return model_name[region.len()..].to_string();
+        if let Some(stripped) = model_name.strip_prefix(region) {
+            return stripped.to_string();
         }
     }
 

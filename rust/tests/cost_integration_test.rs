@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // Cost 计算和跟踪集成测试
 //
 // 测试 API Key 的成本计算、统计和限制功能
@@ -27,15 +28,19 @@ async fn test_basic_cost_recording() {
 
     // 记录第一次使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000, // input tokens
-            500,  // output tokens
-            0,    // cache creation
-            0,    // cache read
-            0.15, // cost
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                // input tokens
+            500,
+                // output tokens
+            0,
+                // cache creation
+            0,
+                // cache read
+            0.15, // cost,
+            ))
         .await
         .expect("Failed to record first usage");
 
@@ -55,15 +60,15 @@ async fn test_basic_cost_recording() {
 
     // 记录第二次使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            2000,
-            1000,
-            0,
-            0,
-            0.30,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                2000,
+                1000,
+                0,
+                0,
+                0.30,,
+            ))
         .await
         .expect("Failed to record second usage");
 
@@ -108,7 +113,15 @@ async fn test_multi_model_cost_tracking() {
 
     for (model, input, output, cost) in &models {
         ctx.service
-            .record_usage(&created_key.id, model, *input, *output, 0, 0, *cost)
+            .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                model.clone(),
+                *input,
+                *output,
+                0,
+                0,
+                *cost,
+            ))
             .await
             .unwrap_or_else(|_| panic!("Failed to record usage for {}", model));
     }
@@ -163,15 +176,19 @@ async fn test_cache_tokens_tracking() {
 
     // 记录带缓存的使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000, // input tokens
-            500,  // output tokens
-            2000, // cache creation tokens
-            1500, // cache read tokens
-            0.25, // cost
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                // input tokens
+            500,
+                // output tokens
+            2000,
+                // cache creation tokens
+            1500,
+                // cache read tokens
+            0.25, // cost,
+            ))
         .await
         .expect("Failed to record cached usage");
 
@@ -214,15 +231,15 @@ async fn test_daily_cost_limit() {
 
     // 记录使用，接近但未超过限制
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            0.80,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.80,,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -261,15 +278,15 @@ async fn test_total_cost_limit() {
 
     // 记录使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            4.50,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                4.50,,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -304,15 +321,15 @@ async fn test_opus_weekly_cost_limit() {
 
     // 记录 Opus 使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-opus-20240229",
-            2000,
-            1000,
-            0,
-            0,
-            1.50,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-opus-20240229".to_string(),
+                2000,
+                1000,
+                0,
+                0,
+                1.50,,
+            ))
         .await
         .expect("Failed to record Opus usage");
 
@@ -327,15 +344,15 @@ async fn test_opus_weekly_cost_limit() {
 
     // 记录非 Opus 模型使用（不应计入 Opus 限制）
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            0.15,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.15,,
+            ))
         .await
         .expect("Failed to record Sonnet usage");
 
@@ -373,15 +390,15 @@ async fn test_daily_stats_reset() {
 
     // 记录一些使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            0.50,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.50,,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -442,15 +459,19 @@ async fn test_concurrent_cost_accumulation() {
         let key_id = created_key.id.clone();
         let handle = tokio::spawn(async move {
             service
-                .record_usage(
-                    &key_id,
-                    "claude-3-5-sonnet-20241022",
-                    100,  // input
-                    50,   // output
-                    0,    // cache creation
-                    0,    // cache read
-                    0.01, // cost
-                )
+                .record_usage(UsageRecord::new(
+                key_id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                100,
+                // input
+                    50,
+                // output
+                    0,
+                // cache creation
+                    0,
+                // cache read
+                    0.01, // cost,
+            ))
                 .await
                 .unwrap_or_else(|_| panic!("Failed to record usage {}", i));
         });
@@ -499,7 +520,15 @@ async fn test_zero_cost_recording() {
 
     // 记录零成本使用（例如测试请求）
     ctx.service
-        .record_usage(&created_key.id, "test-model", 0, 0, 0, 0, 0.0)
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "test-model".to_string(),
+                0,
+                0,
+                0,
+                0,
+                0.0,
+            ))
         .await
         .expect("Failed to record zero cost");
 
@@ -533,15 +562,17 @@ async fn test_large_cost_recording() {
 
     // 记录大额使用
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-opus-20240229",
-            1_000_000, // 1M input tokens
-            500_000,   // 500K output tokens
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-opus-20240229".to_string(),
+                1_000_000,
+                // 1M input tokens
+            500_000,
+                // 500K output tokens
             0,
-            0,
-            150.0, // $150
-        )
+                0,
+                150.0, // $150,
+            ))
         .await
         .expect("Failed to record large cost");
 

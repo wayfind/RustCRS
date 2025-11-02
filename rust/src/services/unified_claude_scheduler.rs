@@ -52,7 +52,8 @@ impl SchedulerAccountVariant {
         }
     }
 
-    pub fn from_str(s: &str) -> Option<Self> {
+    /// 从字符串解析账户变体类型
+    pub fn from_account_type(s: &str) -> Option<Self> {
         match s {
             "claude-official" => Some(SchedulerAccountVariant::ClaudeOfficial),
             "claude-console" => Some(SchedulerAccountVariant::ClaudeConsole),
@@ -151,7 +152,7 @@ impl UnifiedClaudeScheduler {
                         debug!("Using sticky session account: {}", account.name);
 
                         if let Some(variant) =
-                            SchedulerAccountVariant::from_str(&mapping.account_variant)
+                            SchedulerAccountVariant::from_account_type(&mapping.account_variant)
                         {
                             return Ok(SelectedAccount {
                                 account_id: account.id.to_string(),
@@ -595,10 +596,10 @@ mod tests {
         assert_eq!(SchedulerAccountVariant::Ccr.as_str(), "ccr");
 
         assert_eq!(
-            SchedulerAccountVariant::from_str("claude-official"),
+            SchedulerAccountVariant::from_account_type("claude-official"),
             Some(SchedulerAccountVariant::ClaudeOfficial)
         );
-        assert_eq!(SchedulerAccountVariant::from_str("invalid"), None);
+        assert_eq!(SchedulerAccountVariant::from_account_type("invalid"), None);
     }
 
     #[test]

@@ -269,32 +269,30 @@ impl AccountScheduler {
         if let Some(hash) = session_hash {
             if let Some(mapping) = self.get_session_mapping(hash).await? {
                 // 验证映射的账户是否仍然可用
-                if let Ok(account) = self.account_service.get_account(&mapping.account_id).await {
-                    if let Some(account) = account {
-                        if self.is_account_available(&account).await? {
-                            // 续期 TTL
-                            self.extend_session_mapping_ttl(hash).await?;
+                if let Ok(Some(account)) = self.account_service.get_account(&mapping.account_id).await {
+                    if self.is_account_available(&account).await? {
+                        // 续期 TTL
+                        self.extend_session_mapping_ttl(hash).await?;
 
-                            tracing::info!(
-                                "🎯 Using sticky session account: {} ({})",
-                                account.name,
-                                mapping.account_id
-                            );
+                        tracing::info!(
+                            "🎯 Using sticky session account: {} ({})",
+                            account.name,
+                            mapping.account_id
+                        );
 
-                            return Ok(SelectedAccount {
-                                account_id: mapping.account_id,
-                                account_type: mapping.account_type,
-                                platform: mapping.platform,
-                                account_name: account.name,
-                                priority: account.priority,
-                            });
-                        } else {
-                            tracing::warn!(
-                                "⚠️ Mapped account {} is no longer available, selecting new account",
-                                mapping.account_id
-                            );
-                            self.delete_session_mapping(hash).await?;
-                        }
+                        return Ok(SelectedAccount {
+                            account_id: mapping.account_id,
+                            account_type: mapping.account_type,
+                            platform: mapping.platform,
+                            account_name: account.name,
+                            priority: account.priority,
+                        });
+                    } else {
+                        tracing::warn!(
+                            "⚠️ Mapped account {} is no longer available, selecting new account",
+                            mapping.account_id
+                        );
+                        self.delete_session_mapping(hash).await?;
                     }
                 }
             }
@@ -769,7 +767,7 @@ mod tests {
             let mapping = SessionMapping {
                 account_id: "test".to_string(),
                 account_type: AccountType::Shared,
-                platform: platform,
+                platform,
                 created_at: 0,
             };
 

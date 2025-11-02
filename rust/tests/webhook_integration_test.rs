@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // Webhook 集成测试
 
 mod common;

@@ -22,7 +22,7 @@ use tracing::{info, warn};
 
 use crate::config::Settings;
 use crate::middleware::auth::AuthState;
-use crate::models::{ApiKey, ApiKeyPermissions};
+use crate::models::{ApiKey, ApiKeyPermissions, UsageRecord};
 use crate::redis::RedisPool;
 use crate::services::{
     account::ClaudeAccountService, account_scheduler::AccountScheduler, api_key::ApiKeyService,
@@ -261,15 +261,15 @@ async fn handle_messages(
 
             state
                 .api_key_service
-                .record_usage(
-                    &api_key.id,
-                    &model,
+                .record_usage(UsageRecord::new(
+                    api_key.id.clone(),
+                    model.clone(),
                     usage.input_tokens as i64,
                     usage.output_tokens as i64,
                     usage.cache_creation_tokens.unwrap_or(0) as i64,
                     usage.cache_read_tokens.unwrap_or(0) as i64,
                     cost,
-                )
+                ))
                 .await?;
         }
 
@@ -486,15 +486,15 @@ async fn handle_generate_content_impl(
 
         state
             .api_key_service
-            .record_usage(
-                &api_key.id,
-                &model,
+            .record_usage(UsageRecord::new(
+                api_key.id.clone(),
+                model.clone(),
                 usage.input_tokens as i64,
                 usage.output_tokens as i64,
                 usage.cache_creation_tokens.unwrap_or(0) as i64,
                 usage.cache_read_tokens.unwrap_or(0) as i64,
                 cost,
-            )
+            ))
             .await?;
     }
 

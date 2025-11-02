@@ -11,8 +11,8 @@ use claude_relay::routes::{
 use claude_relay::services::{
     bedrock_relay::BedrockRelayService, claude_relay::ClaudeRelayConfig,
     gemini_relay::GeminiRelayService, pricing_service::PricingService, AccountScheduler,
-    AdminService, ApiKeyService, ClaudeAccountService, ClaudeRelayService,
-    UnifiedClaudeScheduler, UnifiedGeminiScheduler, UnifiedOpenAIScheduler,
+    AdminService, ApiKeyService, ClaudeAccountService, ClaudeRelayService, UnifiedClaudeScheduler,
+    UnifiedGeminiScheduler, UnifiedOpenAIScheduler,
 };
 use claude_relay::utils::{init_logger, HttpClient};
 use claude_relay::{RedisPool, Settings};

@@ -1,5 +1,6 @@
 use crate::config::Settings;
 use crate::models::api_key::{ApiKey, ApiKeyCreateOptions, ApiKeyUsageStats, ModelUsage};
+use crate::models::usage_record::UsageRecord;
 use crate::redis::RedisPool;
 use crate::utils::error::{AppError, Result};
 use chrono::Utc;
@@ -484,29 +485,23 @@ impl ApiKeyService {
     ///
     /// # 参数
     ///
-    /// * `key_id` - API Key ID
-    /// * `model` - 使用的模型名称
-    /// * `input_tokens` - 输入 token 数
-    /// * `output_tokens` - 输出 token 数
-    /// * `cache_creation_tokens` - 缓存创建 token 数
-    /// * `cache_read_tokens` - 缓存读取 token 数
-    /// * `cost` - 本次请求成本
+    /// * `usage_record` - 使用记录数据
     ///
     /// # 返回
     ///
     /// 成功返回 Ok(())
     ///
     /// 使用 Redis Hash + 原子操作实现并发安全的使用记录
-    pub async fn record_usage(
-        &self,
-        key_id: &str,
-        model: &str,
-        input_tokens: i64,
-        output_tokens: i64,
-        cache_creation_tokens: i64,
-        cache_read_tokens: i64,
-        cost: f64,
-    ) -> Result<()> {
+    pub async fn record_usage(&self, usage_record: UsageRecord) -> Result<()> {
+        let UsageRecord {
+            key_id,
+            model,
+            input_tokens,
+            output_tokens,
+            cache_creation_tokens,
+            cache_read_tokens,
+            cost,
+        } = usage_record;
         let usage_key = format!("api_key_usage:{}", key_id);
         let model_key = format!("api_key_usage:model:{}:{}", key_id, model);
 
@@ -561,7 +556,7 @@ impl ApiKeyService {
             .map_err(|e| AppError::RedisError(format!("Failed to record usage: {}", e)))?;
 
         // 更新 API Key 的 last_used_at (这个可以容忍最终一致性)
-        let mut api_key = self.get_key(key_id).await?;
+        let mut api_key = self.get_key(&key_id).await?;
         api_key.last_used_at = Some(Utc::now());
         api_key.updated_at = Utc::now();
 

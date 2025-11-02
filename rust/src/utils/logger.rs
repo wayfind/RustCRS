@@ -21,7 +21,18 @@ pub fn init_logger(settings: &Settings) -> anyhow::Result<()> {
                 .with(fmt::layer().json().with_target(false).with_level(true))
                 .init();
         }
-        "pretty" | _ => {
+        "pretty" => {
+            tracing_subscriber::registry()
+                .with(env_filter)
+                .with(
+                    fmt::layer()
+                        .with_target(false)
+                        .with_level(true)
+                        .with_ansi(true),
+                )
+                .init();
+        }
+        _ => {
             tracing_subscriber::registry()
                 .with(env_filter)
                 .with(

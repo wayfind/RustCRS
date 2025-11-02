@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 use crate::utils::error::AppError;
 use crate::RedisPool;
@@ -42,10 +42,10 @@ pub struct InitData {
 /// JWT Claims
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,      // username
-    pub role: String,     // "admin" or "user"
-    pub exp: usize,       // expiration time (Unix timestamp)
-    pub iat: usize,       // issued at (Unix timestamp)
+    pub sub: String,  // username
+    pub role: String, // "admin" or "user"
+    pub exp: usize,   // expiration time (Unix timestamp)
+    pub iat: usize,   // issued at (Unix timestamp)
 }
 
 /// 登录请求
@@ -98,9 +98,8 @@ impl AdminService {
         let file_content = fs::read_to_string(init_file_path)
             .map_err(|e| AppError::InternalError(format!("Failed to read init.json: {}", e)))?;
 
-        let init_data: InitData = serde_json::from_str(&file_content).map_err(|e| {
-            AppError::InternalError(format!("Failed to parse init.json: {}", e))
-        })?;
+        let init_data: InitData = serde_json::from_str(&file_content)
+            .map_err(|e| AppError::InternalError(format!("Failed to parse init.json: {}", e)))?;
 
         // 使用 Argon2 哈希密码 (替代 bcrypt)
         let argon2 = Argon2::default();
@@ -129,7 +128,7 @@ impl AdminService {
         redis::cmd("SET")
             .arg("admin_credentials")
             .arg(credentials_json)
-            .query_async(&mut conn)
+            .query_async::<_, ()>(&mut conn)
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to store credentials: {}", e)))?;
 
@@ -225,15 +224,16 @@ impl AdminService {
                 AppError::Unauthorized("Administrator credentials not found".to_string())
             })?;
 
-        let credentials: AdminCredentials = serde_json::from_str(&credentials_json).map_err(
-            |e| AppError::InternalError(format!("Failed to deserialize credentials: {}", e)),
-        )?;
+        let credentials: AdminCredentials =
+            serde_json::from_str(&credentials_json).map_err(|e| {
+                AppError::InternalError(format!("Failed to deserialize credentials: {}", e))
+            })?;
 
         Ok(credentials)
     }
 
     /// 更新最后登录时间
-    async fn update_last_login(&self, username: &str) -> Result<(), AppError> {
+    async fn update_last_login(&self, _username: &str) -> Result<(), AppError> {
         let mut credentials = self.get_admin_credentials().await?;
 
         credentials.last_login = Some(Utc::now());
@@ -248,11 +248,9 @@ impl AdminService {
         redis::cmd("SET")
             .arg("admin_credentials")
             .arg(credentials_json)
-            .query_async(&mut conn)
+            .query_async::<_, ()>(&mut conn)
             .await
-            .map_err(|e| {
-                AppError::InternalError(format!("Failed to update last login: {}", e))
-            })?;
+            .map_err(|e| AppError::InternalError(format!("Failed to update last login: {}", e)))?;
 
         Ok(())
     }
@@ -305,9 +303,8 @@ impl AdminService {
             AppError::InternalError(format!("Failed to serialize init data: {}", e))
         })?;
 
-        fs::write("data/init.json", init_json).map_err(|e| {
-            AppError::InternalError(format!("Failed to write init.json: {}", e))
-        })?;
+        fs::write("data/init.json", init_json)
+            .map_err(|e| AppError::InternalError(format!("Failed to write init.json: {}", e)))?;
 
         // 创建管理员凭据
         let admin_credentials = AdminCredentials {
@@ -328,7 +325,7 @@ impl AdminService {
         redis::cmd("SET")
             .arg("admin_credentials")
             .arg(credentials_json)
-            .query_async(&mut conn)
+            .query_async::<_, ()>(&mut conn)
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to store credentials: {}", e)))?;
 
@@ -339,11 +336,7 @@ impl AdminService {
     }
 
     /// 重置管理员密码
-    pub async fn reset_password(
-        &self,
-        username: &str,
-        new_password: &str,
-    ) -> Result<(), AppError> {
+    pub async fn reset_password(&self, username: &str, new_password: &str) -> Result<(), AppError> {
         // 检查密码长度
         if new_password.len() < 8 {
             return Err(AppError::ValidationError(
@@ -368,9 +361,8 @@ impl AdminService {
         // 更新 init.json
         let init_file_path = Path::new("data/init.json");
         if init_file_path.exists() {
-            let file_content = fs::read_to_string(init_file_path).map_err(|e| {
-                AppError::InternalError(format!("Failed to read init.json: {}", e))
-            })?;
+            let file_content = fs::read_to_string(init_file_path)
+                .map_err(|e| AppError::InternalError(format!("Failed to read init.json: {}", e)))?;
 
             let mut init_data: InitData = serde_json::from_str(&file_content).map_err(|e| {
                 AppError::InternalError(format!("Failed to parse init.json: {}", e))
@@ -406,11 +398,9 @@ impl AdminService {
         redis::cmd("SET")
             .arg("admin_credentials")
             .arg(credentials_json)
-            .query_async(&mut conn)
+            .query_async::<_, ()>(&mut conn)
             .await
-            .map_err(|e| {
-                AppError::InternalError(format!("Failed to update credentials: {}", e))
-            })?;
+            .map_err(|e| AppError::InternalError(format!("Failed to update credentials: {}", e)))?;
 
         info!("✅ Admin password reset for: {}", username);
 
@@ -424,8 +414,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_jwt_token_generation_and_verification() {
-        let redis = Arc::new(RedisPool::new("redis://localhost:6379", 10).await.unwrap());
-        let service = AdminService::new(redis, "test_secret_key_at_least_32_chars_long".to_string());
+        let settings = crate::config::Settings::new().expect("Failed to create test settings");
+        let redis = Arc::new(RedisPool::new(&settings).expect("Failed to create Redis pool"));
+        let service =
+            AdminService::new(redis, "test_secret_key_at_least_32_chars_long".to_string());
 
         let token = service
             .generate_token("admin", "admin")
@@ -441,8 +433,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_invalid_token() {
-        let redis = Arc::new(RedisPool::new("redis://localhost:6379", 10).await.unwrap());
-        let service = AdminService::new(redis, "test_secret_key_at_least_32_chars_long".to_string());
+        let settings = crate::config::Settings::new().expect("Failed to create test settings");
+        let redis = Arc::new(RedisPool::new(&settings).expect("Failed to create Redis pool"));
+        let service =
+            AdminService::new(redis, "test_secret_key_at_least_32_chars_long".to_string());
 
         let result = service.verify_token("invalid_token");
         assert!(result.is_err());
