@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 mod common;
 
 use common::TestContext;
@@ -62,15 +63,15 @@ async fn test_complete_key_lifecycle() {
 
     // 6. 记录使用统计
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            100,
-            50,
-            0.05,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                100,
+                50,
+                0.05,,
+            ))
         .await
         .expect("Failed to record usage");
     println!("✅ Usage recording successful");
@@ -223,7 +224,15 @@ async fn test_cost_limit_enforcement() {
 
     // 记录一些使用 (总计 $0.5)
     ctx.service
-        .record_usage(&key.id, "claude-3-5-sonnet-20241022", 1000, 500, 0, 0, 0.5)
+        .record_usage(UsageRecord::new(
+                key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.5,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -274,7 +283,15 @@ async fn test_stats_reset() {
 
     // 记录使用
     ctx.service
-        .record_usage(&key.id, "test-model", 100, 50, 0, 0, 0.01)
+        .record_usage(UsageRecord::new(
+                key.id.clone(),
+                "test-model".to_string(),
+                100,
+                50,
+                0,
+                0,
+                0.01,
+            ))
         .await
         .expect("Failed to record usage");
 

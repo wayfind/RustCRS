@@ -114,29 +114,34 @@ pub fn create_admin_routes(admin_service: Arc<AdminService>) -> Router {
     Router::new()
         // 公开路由 - 不需要认证
         .route("/auth/login", post(login_handler))
-
         // 受保护路由 - 需要JWT认证
         .route("/profile", get(get_profile_handler))
         .route("/auth/user", get(get_profile_handler))
         .route("/oem-settings", get(get_oem_settings_handler))
         .route("/oem-settings", put(update_oem_settings_handler))
         .route("/dashboard", get(get_dashboard_handler))
-
         // Claude账户管理
         .route("/claude-accounts", get(list_claude_accounts_handler))
         .route("/claude-accounts", post(create_claude_account_handler))
         .route("/claude-accounts/:id", put(update_claude_account_handler))
-        .route("/claude-accounts/:id", delete(delete_claude_account_handler))
-        .route("/claude-accounts/generate-auth-url", post(generate_auth_url_handler))
-        .route("/claude-accounts/exchange-code", post(exchange_code_handler))
-
+        .route(
+            "/claude-accounts/:id",
+            delete(delete_claude_account_handler),
+        )
+        .route(
+            "/claude-accounts/generate-auth-url",
+            post(generate_auth_url_handler),
+        )
+        .route(
+            "/claude-accounts/exchange-code",
+            post(exchange_code_handler),
+        )
         // API Keys管理
         .route("/api-keys", get(list_api_keys_handler))
         .route("/api-keys", post(create_api_key_handler))
         .route("/api-keys/:id", put(update_api_key_handler))
         .route("/api-keys/:id", delete(delete_api_key_handler))
         .route("/api-keys/:id/toggle", put(toggle_api_key_handler))
-
         // 应用认证中间件到所有受保护路由
         .layer(auth_layer(admin_service.clone()))
         .with_state(admin_service)
@@ -203,11 +208,14 @@ async fn update_oem_settings_handler(
     info!("💾 Updating OEM settings: {:?}", settings);
 
     // Mock实现 - 直接返回接收到的设置
-    Ok((StatusCode::OK, Json(json!({
-        "success": true,
-        "message": "OEM设置已更新",
-        "settings": settings
-    }))))
+    Ok((
+        StatusCode::OK,
+        Json(json!({
+            "success": true,
+            "message": "OEM设置已更新",
+            "settings": settings
+        })),
+    ))
 }
 
 // ============================================================================
@@ -347,7 +355,10 @@ async fn generate_auth_url_handler(
 async fn exchange_code_handler(
     Json(request): Json<ExchangeCodeRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    info!("🔄 Exchanging authorization code for account: {}", request.name);
+    info!(
+        "🔄 Exchanging authorization code for account: {}",
+        request.name
+    );
 
     // Mock实现 - 返回成功响应
     let response = json!({
@@ -431,9 +442,7 @@ async fn update_api_key_handler(
 }
 
 /// 删除API Key（Mock实现）
-async fn delete_api_key_handler(
-    Path(id): Path<String>,
-) -> Result<impl IntoResponse, AppError> {
+async fn delete_api_key_handler(Path(id): Path<String>) -> Result<impl IntoResponse, AppError> {
     info!("🗑️  Deleting API key: {}", id);
 
     let response = json!({
@@ -445,9 +454,7 @@ async fn delete_api_key_handler(
 }
 
 /// 启用/禁用API Key（Mock实现）
-async fn toggle_api_key_handler(
-    Path(id): Path<String>,
-) -> Result<impl IntoResponse, AppError> {
+async fn toggle_api_key_handler(Path(id): Path<String>) -> Result<impl IntoResponse, AppError> {
     info!("🔄 Toggling API key: {}", id);
 
     let response = json!({
@@ -469,14 +476,16 @@ async fn toggle_api_key_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::RedisPool;
+    use crate::config::Settings;
+    use crate::RedisPool;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use tower::ServiceExt;
 
     #[tokio::test]
     async fn test_login_route() {
-        let redis = Arc::new(RedisPool::new("redis://localhost:6379", 10).await.unwrap());
+        let settings = Settings::new().expect("Failed to create test settings");
+        let redis = Arc::new(RedisPool::new(&settings).expect("Failed to create Redis pool"));
         let admin_service = Arc::new(AdminService::new(
             redis,
             "test_secret_key_at_least_32_chars_long".to_string(),
@@ -488,16 +497,13 @@ mod tests {
             .uri("/auth/login")
             .method("POST")
             .header("content-type", "application/json")
-            .body(Body::from(
-                r#"{"username":"admin","password":"password"}"#,
-            ))
+            .body(Body::from(r#"{"username":"admin","password":"password"}"#))
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
 
         assert!(
-            response.status() == StatusCode::OK
-                || response.status() == StatusCode::UNAUTHORIZED
+            response.status() == StatusCode::OK || response.status() == StatusCode::UNAUTHORIZED
         );
     }
 }

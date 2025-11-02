@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // Pricing Service Integration Tests
 //
 // 测试定价服务的所有核心功能

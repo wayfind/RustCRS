@@ -52,8 +52,7 @@ fn bench_simple_serialization(c: &mut Criterion) {
     let json = serde_json::to_string(&message).unwrap();
     c.bench_function("simple_deserialize", |b| {
         b.iter(|| {
-            serde_json::from_str::<SimpleMessage>(black_box(&json))
-                .expect("Deserialization failed")
+            serde_json::from_str::<SimpleMessage>(black_box(&json)).expect("Deserialization failed")
         });
     });
 }

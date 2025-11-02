@@ -60,7 +60,9 @@ fn bench_decryption_with_cache(c: &mut Criterion) {
     group.bench_function("first_decrypt_cache_miss", |b| {
         b.iter(|| {
             let _ = CryptoService::clear_cache(); // 确保每次都是缓存未命中
-            crypto.decrypt(black_box(&encrypted)).expect("Decryption failed")
+            crypto
+                .decrypt(black_box(&encrypted))
+                .expect("Decryption failed")
         });
     });
 
@@ -69,7 +71,11 @@ fn bench_decryption_with_cache(c: &mut Criterion) {
         // 预热缓存
         let _ = crypto.decrypt(&encrypted);
 
-        b.iter(|| crypto.decrypt(black_box(&encrypted)).expect("Decryption failed"));
+        b.iter(|| {
+            crypto
+                .decrypt(black_box(&encrypted))
+                .expect("Decryption failed")
+        });
     });
 
     group.finish();

@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // Streaming Integration Tests
 //
 // 测试流式响应功能的所有端点

@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 mod common;
 
 use chrono::Utc;

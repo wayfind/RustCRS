@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 mod common;
 
 use claude_relay::models::api_key::{ApiKeyPermissions, ExpirationMode};
@@ -101,15 +102,15 @@ async fn test_cost_limits() {
 
     // Record usage that stays under limit
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            0.50,
-        )
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.50,,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -284,15 +285,17 @@ async fn test_token_limits() {
 
     // Record usage under limit
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            2000, // input tokens
-            1000, // output tokens
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                2000,
+                // input tokens
+            1000,
+                // output tokens
             0,
-            0,
-            0.10,
-        )
+                0,
+                0.10,,
+            ))
         .await
         .expect("Failed to record usage");
 
@@ -314,15 +317,17 @@ async fn test_token_limits() {
 
     // Record more usage to exceed limit
     ctx.service
-        .record_usage(
-            &created_key.id,
-            "claude-3-5-sonnet-20241022",
-            2000, // This would put us at 5000 total
-            1000, // This puts us over at 6000
+        .record_usage(UsageRecord::new(
+                created_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                2000,
+                // This would put us at 5000 total
+            1000,
+                // This puts us over at 6000
             0,
-            0,
-            0.10,
-        )
+                0,
+                0.10,,
+            ))
         .await
         .expect("Failed to record second usage");
 
@@ -356,29 +361,29 @@ async fn test_multiple_keys_isolation() {
 
     // Record usage for key1
     ctx.service
-        .record_usage(
-            &key1.id,
-            "claude-3-5-sonnet-20241022",
-            1000,
-            500,
-            0,
-            0,
-            0.10,
-        )
+        .record_usage(UsageRecord::new(
+                key1.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                1000,
+                500,
+                0,
+                0,
+                0.10,,
+            ))
         .await
         .expect("Failed to record usage for key1");
 
     // Record different usage for key2
     ctx.service
-        .record_usage(
-            &key2.id,
-            "claude-3-5-sonnet-20241022",
-            2000,
-            1000,
-            0,
-            0,
-            0.20,
-        )
+        .record_usage(UsageRecord::new(
+                key2.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                2000,
+                1000,
+                0,
+                0,
+                0.20,,
+            ))
         .await
         .expect("Failed to record usage for key2");
 

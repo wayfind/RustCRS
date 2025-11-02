@@ -74,7 +74,7 @@ install-web:
 # 前端构建
 build-web:
 	@echo "🎨 构建 Web 管理界面..."
-	npm run build:web
+	cd web/admin-spa && npm run build
 
 build-all: install install-web build-web
 	@echo "🎉 完整项目构建完成！"

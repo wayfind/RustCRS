@@ -274,9 +274,7 @@ pub fn require_admin_role(request: &Request) -> Result<(), AppError> {
         .ok_or_else(|| AppError::Unauthorized("Missing JWT authentication".to_string()))?;
 
     if jwt_state.claims.role != "admin" {
-        return Err(AppError::Forbidden(
-            "Admin role required".to_string(),
-        ));
+        return Err(AppError::Forbidden("Admin role required".to_string()));
     }
 
     Ok(())

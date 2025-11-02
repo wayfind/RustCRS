@@ -1,3 +1,4 @@
+use claude_relay::models::UsageRecord;
 // API Routes Integration Tests
 //
 // 测试 Claude API 路由层的所有端点
@@ -289,15 +290,15 @@ async fn test_usage_endpoint() {
 
     // Record some usage
     ctx.service
-        .record_usage(
-            &api_key.id,
-            "claude-3-5-sonnet-20241022",
-            100,
-            50,
-            10,
-            5,
-            0.01,
-        )
+        .record_usage(UsageRecord::new(
+                api_key.id.clone(),
+                "claude-3-5-sonnet-20241022".to_string(),
+                100,
+                50,
+                10,
+                5,
+                0.01,,
+            ))
         .await
         .unwrap();
 
