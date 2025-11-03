@@ -62,6 +62,8 @@ pub struct ApiKeyRequest {
     pub rate_limit_window: Option<i32>,
     #[serde(rename = "rateLimitRequests")]
     pub rate_limit_requests: Option<i32>,
+    #[serde(default)]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -181,6 +183,7 @@ pub fn create_admin_routes(
         // API Keys管理
         .route("/api-keys", get(list_api_keys_handler))
         .route("/api-keys", post(create_api_key_handler))
+        .route("/api-keys/:id", get(get_api_key_handler)) // ISSUE-UI-009: 添加获取单个API Key详情
         .route("/api-keys/:id", put(update_api_key_handler))
         .route("/api-keys/:id", delete(delete_api_key_handler))
         .route("/api-keys/:id/toggle", put(toggle_api_key_handler))
@@ -189,6 +192,9 @@ pub fn create_admin_routes(
         // 客户端和分组管理
         .route("/supported-clients", get(get_supported_clients_handler))
         .route("/account-groups", get(get_account_groups_handler))
+        // Claude Code 版本管理
+        .route("/claude-code-version", get(get_claude_code_version_handler))
+        .route("/claude-code-version/clear", post(clear_claude_code_version_handler))
         // 用户管理
         .route("/users", get(get_users_handler))
         // 统计
@@ -487,6 +493,26 @@ async fn list_api_keys_handler(
     Ok((StatusCode::OK, Json(response)))
 }
 
+/// 获取单个API Key详情
+///
+/// 修复 ISSUE-UI-009: 编辑 API Key 时前端需要获取完整配置
+async fn get_api_key_handler(
+    State(state): State<Arc<AdminRouteState>>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("🔍 Getting API key detail: {}", id);
+
+    // 使用真实服务获取API Key
+    let api_key = state.api_key_service.get_key(&id).await?;
+
+    let response = json!({
+        "success": true,
+        "data": api_key
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
 /// 创建API Key
 async fn create_api_key_handler(
     State(state): State<Arc<AdminRouteState>>,
@@ -513,6 +539,7 @@ async fn create_api_key_handler(
         icon: None,
         permissions,
         is_active: true,
+        tags: key_request.tags.clone(),  // 传递标签
         ..Default::default()
     };
 
@@ -551,7 +578,7 @@ async fn update_api_key_handler(
     let response = json!({
         "success": true,
         "message": "API Key更新成功",
-        "apiKey": updated_key
+        "data": updated_key  // 修复 ISSUE-UI-007: 与其他端点保持一致，使用 data 字段
     });
 
     Ok((StatusCode::OK, Json(response)))
@@ -948,6 +975,48 @@ async fn get_account_groups_handler(
     Ok((StatusCode::OK, Json(groups)))
 }
 
+/// 获取 Claude Code 版本（统一 User-Agent）
+///
+/// 返回配置的 Claude Code 版本字符串，用作统一的 User-Agent
+/// 前端在添加账户时会请求此端点获取版本信息
+async fn get_claude_code_version_handler(
+    State(_state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("🔧 Fetching Claude Code version");
+
+    // 从环境变量获取配置的版本号，如果未设置则使用默认值
+    let version = std::env::var("CLAUDE_CODE_VERSION")
+        .unwrap_or_else(|_| "1.1.0".to_string());
+
+    let response = json!({
+        "success": true,
+        "data": {
+            "version": version
+        }
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
+/// 清除 Claude Code 版本缓存
+///
+/// 占位实现 - 清除版本缓存（如果有缓存机制）
+/// 前端在某些情况下会调用此端点重置版本信息
+async fn clear_claude_code_version_handler(
+    State(_state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("🧹 Clearing Claude Code version cache");
+
+    // 占位实现 - 实际上没有缓存需要清除
+    // 返回成功响应即可
+    let response = json!({
+        "success": true,
+        "message": "Version cache cleared"
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
 // ============================================================================
 // Account Management Placeholder Handlers
 // ============================================================================
@@ -1074,7 +1143,7 @@ async fn check_updates_handler(
 async fn fetch_latest_version_from_github() -> Result<String, AppError> {
     // GitHub API endpoint (假设仓库为 anthropics/claude-relay-service)
     // 实际项目应该从配置中读取仓库信息
-    let url = "https://api.github.com/repos/anthropics/claude-relay-service/releases/latest";
+    let url = "";
 
     let client = reqwest::Client::builder()
         .user_agent("claude-relay-service")

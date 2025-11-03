@@ -31,78 +31,112 @@ issue-todo.md (待修复)
 
 ## 🎯 当前工作批次
 
-**批次 9**: API Keys 删除功能和标签管理
+### 批次 14 (待规划): 待定
 
-**包含问题**: 2 个 (P0 × 1, P1 × 1)
-- ISSUE-UI-008: 删除 API Key 操作未生效 (P0)
-- ISSUE-UI-004: GET /admin/tags 返回 405 Method Not Allowed (P1)
+**状态**: ⏳ 暂无进行中的批次
 
-**开始时间**: 2025-11-03
-**状态**: 🔄 修复中
-
----
-
-## 📝 问题详情
-
-### ISSUE-UI-008 - 删除 API Key 操作未生效
-
-**优先级**: P0
-**模块**: 管理后台/API Keys/删除功能
-**状态**: ✅ 已验证 - **非实际问题**
-
-**问题描述**:
-点击删除按钮并确认后,显示"API Key 已删除"成功提示,但 API Key 仍然在活跃列表中显示,删除操作完全未生效。
-
-**调查结果**:
-通过代码审查和 UI 测试验证,删除功能**完全正常工作**:
-
-1. ✅ **代码审查** (admin.rs:560, api_key.rs:387, api_key.rs:318):
-   - 删除处理器正确调用 ApiKeyService::delete_key
-   - 软删除正确设置 is_deleted=true
-   - 列表查询正确过滤已删除项
-
-2. ✅ **UI 测试验证** (Playwright):
-   - 删除操作成功: 显示"API Key 已删除"消息
-   - API Key 从活跃列表移除: 3 → 2 条记录
-   - 计数正确更新: "活跃 API Keys 3" → "活跃 API Keys 2"
-
-**结论**: **ISSUE-UI-008 是误报** - 删除功能实际运行正常,无需修复。
-
-**新发现问题**:
-在测试过程中发现 GET `/admin/api-keys/deleted` 返回 405 错误,"已删除 API Keys"标签页无法加载。这是一个独立的问题,不影响删除操作本身。
-
----
-
-### ISSUE-UI-004 - GET /admin/tags 返回 405 Method Not Allowed
-
-**优先级**: P1
-**模块**: 管理后台/API Keys/标签管理
-**状态**: ✅ 已修复
-
-**问题描述**:
-创建或编辑 API Key 时,前端请求 GET /admin/tags 返回 405 Method Not Allowed,标签下拉列表无法加载已有标签。
-
-**根本原因**:
-标签端点已实现在 `/admin/api-keys/tags`,但前端请求 `/admin/tags`,路由不匹配导致 405 错误。
-
-**修复方案**:
-1. ✅ 在 admin.rs:188 添加路由别名 `.route("/tags", get(get_api_keys_tags_handler))`
-2. ✅ 保持原路由 `/api-keys/tags` 以实现向后兼容
-3. ✅ 编写集成测试 `test_get_tags_endpoint` - 测试通过
-4. ✅ 更新 API 文档添加别名说明
-
-**修复文件**: `rust/src/routes/admin.rs:188`
-
-**集成测试**: `rust/tests/test_get_tags_endpoint.rs` ✅ 通过
-
-**验证结果**:
-- ✅ 编译成功
-- ✅ 集成测试通过 (3 passed)
-- ✅ API 文档已更新
+**说明**:
+- 批次 13 已完成
+- 等待下一批问题安排
 
 ---
 
 ## 📜 已完成批次
+
+### 批次 13 (已完成): 标签和账户管理功能修复
+
+**包含问题**: 2 个 (P2 × 2)
+- ✅ ISSUE-UI-006: 创建 API Key 时设置的标签未显示 (P2)
+- ✅ ISSUE-UI-011: 添加账户对话框打开时 404 错误 (P2)
+
+**完成时间**: 2025-11-03
+**状态**: ✅ 已完成
+
+**修复内容**:
+1. ISSUE-UI-006: 为 `ApiKeyRequest` 添加 `tags` 字段，在创建时正确传递标签
+2. ISSUE-UI-011: 实现 `/admin/claude-code-version` 和 `/admin/claude-code-version/clear` 端点
+
+**验证结果**:
+- ✅ 单元测试: 107个全部通过
+- ✅ 集成测试: 3个标签测试全部通过
+- ✅ 编译测试通过，端点已注册
+- ✅ 向后兼容性良好
+
+**详细报告**: `claudedocs/batch-13-completion-report.md`
+
+---
+
+### 批次 12 (已完成): API Key 删除功能修复
+
+**包含问题**: 1 个 (P0)
+- ✅ ISSUE-UI-008: 删除 API Key 操作未生效 (P0 - Critical)
+
+**完成时间**: 2025-11-03
+**状态**: ✅ 已完成
+
+**修复内容**:
+1. 修复 API Key 状态字段序列化格式（添加 serde rename 属性）
+2. 字段命名从 snake_case 改为 camelCase (isActive, isDeleted, deletedBy, deletedByType)
+3. 新增集成测试 (`rust/tests/test_api_key_delete.rs`)
+
+**验证结果**:
+- ✅ 单元测试: 107个全部通过
+- ✅ 集成测试: 2个新增测试全部通过
+- ✅ 删除逻辑本身正确，问题在序列化层
+- ✅ 字段名修复完成，camelCase 兼容
+
+**详细报告**: `claudedocs/batch-12-completion-report.md`
+
+---
+
+### 批次 11 (已完成): Tags 端点别名和日期格式修复
+
+**包含问题**: 2 个 (P1 × 1, P2 × 1)
+- ✅ ISSUE-UI-004: GET /admin/tags 返回 405 Method Not Allowed (P1) - 批次 9 已修复
+- ✅ ISSUE-UI-005: API Key 创建时间显示 "Invalid Date" (P2)
+
+**完成时间**: 2025-11-03
+**状态**: ✅ 已完成
+
+**修复内容**:
+1. 验证 GET /admin/tags 端点（批次 9 已修复）
+2. 修复 API Key 日期字段序列化格式（添加 serde rename 属性）
+3. 新增集成测试 (`rust/tests/test_api_key_date_format.rs`)
+
+**验证结果**:
+- ✅ 单元测试: 107个全部通过
+- ✅ 集成测试: 日期格式测试全部通过
+- ✅ ISSUE-UI-004: 已在批次 9 修复并验证
+- ✅ ISSUE-UI-005: 字段名修复完成，camelCase 兼容
+
+**详细报告**: `claudedocs/batch-11-completion-report.md`
+
+---
+
+### 批次 10 (已完成): API Keys 编辑和创建功能修复
+
+**包含问题**: 3 个 (P2 × 3)
+- ✅ ISSUE-UI-009: 编辑 API Key 时获取详情失败 (404)
+- ✅ ISSUE-UI-007: 编辑 API Key 后名称未更新
+- ✅ ISSUE-UI-010: 创建 API Key 成功后 JavaScript 错误
+
+**完成时间**: 2025-11-03
+**状态**: ✅ 已完成
+
+**修复内容**:
+1. 实现 GET /admin/api-keys/:id 端点
+2. 修复响应字段一致性（统一使用 `data` 字段）
+3. 新增集成测试 (`rust/tests/test_api_key_detail.rs`)
+
+**验证结果**:
+- ✅ 单元测试: 107个全部通过
+- ✅ 集成测试: 5个新增测试全部通过
+- ✅ UI 漫游测试: 编辑和保存功能正常
+- ⚠️ API 文档待更新
+
+**详细报告**: `claudedocs/batch-10-completion-report.md`
+
+---
 
 ### 批次 8 (已完成): Dashboard 数据结构修复
 
