@@ -287,42 +287,63 @@ async fn update_oem_settings_handler(
 async fn get_dashboard_handler() -> Result<impl IntoResponse, AppError> {
     info!("📊 Getting dashboard data");
 
-    // Mock数据 - 返回符合前端期望的数据结构
-    // 前端期望: data.overview, data.recentActivity, data.systemAverages, data.realtimeMetrics, data.systemHealth
+    // Mock数据 - 返回符合前端期望的完整数据结构
+    // 前端期望: data.overview, data.recentActivity, data.systemAverages, data.realtimeMetrics, data.systemHealth, data.systemTimezone
     let dashboard = json!({
         "success": true,
         "data": {
             "overview": {
-                "totalKeys": 0,
-                "activeKeys": 0,
+                // API Keys 统计
+                "totalApiKeys": 0,
+                "activeApiKeys": 0,
+                // 账户统计
                 "totalAccounts": 0,
+                "normalAccounts": 0,
+                "abnormalAccounts": 0,
+                "pausedAccounts": 0,
                 "activeAccounts": 0,
-                "todayRequests": 0,
-                "totalRequests": 0,
-                "systemStatus": "正常",
-                "uptime": 0,
-                "todayTokens": {
-                    "total": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cost": 0.0
+                "rateLimitedAccounts": 0,
+                "accountsByPlatform": {
+                    "claude": 0,
+                    "gemini": 0,
+                    "openai": 0,
+                    "bedrock": 0,
+                    "azure": 0
                 },
-                "totalTokens": {
-                    "total": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cost": 0.0
-                },
-                "realtime": {
-                    "rpm": 0,
-                    "tpm": 0,
-                    "window": 5
-                }
+                // 请求统计
+                "totalRequestsUsed": 0,
+                // Token 统计
+                "totalTokensUsed": 0,
+                "totalInputTokensUsed": 0,
+                "totalOutputTokensUsed": 0,
+                "totalCacheCreateTokensUsed": 0,
+                "totalCacheReadTokensUsed": 0
             },
-            "recentActivity": {},
-            "systemAverages": {},
-            "realtimeMetrics": {},
-            "systemHealth": {}
+            "recentActivity": {
+                // 今日请求
+                "requestsToday": 0,
+                // 今日 Token
+                "tokensToday": 0,
+                "inputTokensToday": 0,
+                "outputTokensToday": 0,
+                "cacheCreateTokensToday": 0,
+                "cacheReadTokensToday": 0
+            },
+            "systemAverages": {
+                "rpm": 0,
+                "tpm": 0
+            },
+            "realtimeMetrics": {
+                "rpm": 0,
+                "tpm": 0,
+                "windowMinutes": 5,
+                "isHistorical": false
+            },
+            "systemHealth": {
+                "redisConnected": true,
+                "uptime": 0
+            },
+            "systemTimezone": 8
         }
     });
 
@@ -807,11 +828,12 @@ async fn get_model_stats_handler(
     info!("📊 Fetching model stats for period: {}", period);
 
     // 占位数据 - 返回空模型统计
+    // 前端期望: response.data (数组)
     // TODO: 按模型维度聚合 Redis 数据
     let stats = serde_json::json!({
         "success": true,
         "period": period,
-        "models": []
+        "data": []  // ← 字段名从 "models" 改为 "data" 以匹配前端期望
     });
 
     Ok((StatusCode::OK, Json(stats)))
@@ -1139,11 +1161,12 @@ mod tests {
         let settings = Settings::new().expect("Failed to create test settings");
         let redis = Arc::new(RedisPool::new(&settings).expect("Failed to create Redis pool"));
         let admin_service = Arc::new(AdminService::new(
-            redis,
+            redis.clone(),
             "test_secret_key_at_least_32_chars_long".to_string(),
         ));
+        let api_key_service = Arc::new(ApiKeyService::new((*redis).clone(), settings.clone()));
 
-        let app = create_admin_routes(admin_service);
+        let app = create_admin_routes(admin_service, api_key_service);
 
         let request = Request::builder()
             .uri("/auth/login")

@@ -31,23 +31,86 @@ issue-todo.md (待修复)
 
 ## 🎯 当前工作批次
 
-**批次 7**: API Keys 编辑和创建功能修复
+**批次 8**: Dashboard 数据结构修复 (✅ 已完成)
 
-**包含问题**: 3 个 (P2 × 3)
-- ISSUE-UI-009: 编辑 API Key 时 404 错误（详情接口缺失）
-- ISSUE-UI-007: 编辑后名称未更新（可能依赖 UI-009）
-- ISSUE-UI-010: 创建后 JS 错误（响应结构问题）
+**包含问题**: 1 个 (P0)
+- ISSUE-UI-003: Dashboard 数据字段名不匹配导致前端报错
 
 **修复策略**:
-1. 先修复 UI-009（详情接口），因为 UI-007 可能依赖它
-2. 再修复 UI-007（更新功能）
-3. 最后修复 UI-010（创建响应结构）
+1. 修复 /admin/model-stats 响应字段名（models → data）
+2. 完善 /admin/dashboard 所有嵌套对象字段
+3. UI 测试验证无 JavaScript 错误
 
 ---
 
 ## 🟡 进行中问题
 
-### 批次 7: [API Keys 编辑和创建功能]
+### 批次 8: [Dashboard 数据结构修复]
+
+---
+
+#### ISSUE-UI-003 - Dashboard 数据字段名不匹配导致前端报错
+
+**优先级**: P0
+**模块**: 管理后台/Dashboard/API契约
+**状态**: ✅ 已完成
+**发现时间**: 2025-11-03
+**发现方式**: 深度 UI 漫游测试（Playwright浏览器自动化）
+
+**重现步骤**:
+1. 登录管理后台 http://localhost:8080/admin-next
+2. 访问 Dashboard 页面
+3. 观察浏览器控制台错误
+
+**预期行为**:
+- Dashboard 页面正常加载统计数据
+- 显示 API Keys、账户、请求数等统计信息
+- 无 JavaScript 错误
+
+**实际行为**:
+- 页面显示空白区域
+- 浏览器控制台报错: `TypeError: Cannot read properties of undefined (reading 'length')`
+
+**🔍 根因分析**:
+- **根本原因 1**: `/admin/model-stats` 返回 `{"models": []}` 而非 `{"data": []}`
+  - 为什么 1: 前端代码 `dashboardModelStats.value = response.data` 期待 `data` 字段
+  - 为什么 2: 后端使用了 `models` 字段名
+  - 为什么 3: admin.rs:814 使用错误字段名
+  - **修复**: 将字段名从 `models` 改为 `data`
+
+- **根本原因 2**: Dashboard 端点返回的嵌套对象为空 `{}`
+  - 为什么 1: 前端访问 `recentActivity.requestsToday` 等字段失败
+  - 为什么 2: 后端只返回空对象，未填充必需字段
+  - 为什么 3: admin.rs:322-325 四个嵌套对象都是 `{}`
+  - **修复**: 完整填充所有必需字段
+
+**修复进度**:
+- [x] 修复 /admin/model-stats 响应字段（models → data）
+- [x] 填充 dashboard overview 所有字段
+- [x] 填充 recentActivity 字段
+- [x] 填充 systemAverages 字段
+- [x] 填充 realtimeMetrics 字段
+- [x] 填充 systemHealth 字段
+- [x] 添加 systemTimezone 字段
+- [x] 编译通过
+- [x] UI 测试验证：Dashboard 完全加载，无 JavaScript 错误
+- [x] 截图确认修复成功
+
+**修复文件**:
+- `rust/src/routes/admin.rs:812-815` - 修复 model-stats 响应字段
+- `rust/src/routes/admin.rs:287-350` - 完善 dashboard 数据结构
+
+**验证结果**:
+- ✅ 编译成功
+- ✅ 服务启动正常
+- ✅ Dashboard 页面完整加载
+- ✅ 无 JavaScript 错误
+- ✅ 所有统计卡片正常显示（值为 0，符合 Mock 数据预期）
+- ✅ 图表区域正常显示"暂无数据"提示
+
+**备注**:
+- 当前为 Mock 实现，所有数据显示为 0
+- 后续需要接入真实 Redis 数据聚合
 
 ---
 

@@ -1668,7 +1668,46 @@ Get system dashboard statistics.
 
 **Notes:**
 - Response structure changed in v2.0: `stats` → `data.overview`
-- Placeholder data returned for some fields (work in progress)
+- **Current Implementation (v2.0.0)**: Returns mock/placeholder data with complete structure
+  - All nested objects (`overview`, `recentActivity`, `systemAverages`, `realtimeMetrics`, `systemHealth`) are fully populated with zero/default values
+  - Field name corrected from `stats` to `data.overview` to match frontend expectations (fixed in batch 8, 2025-11-03)
+  - `/admin/model-stats` response field corrected from `models` to `data` (fixed in batch 8, 2025-11-03)
+
+---
+
+### GET /admin/model-stats
+
+Get model usage statistics for dashboard display.
+
+**Authentication:** Admin Token (JWT)
+
+**Query Parameters:**
+- `period` (string, optional): Time period - `daily`, `weekly`, `monthly` (default: `monthly`)
+
+**Request Example:**
+```
+GET /admin/model-stats?period=monthly
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "period": "monthly",
+  "data": []
+}
+```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `period` (string): Time period queried
+- `data` (array): Model statistics array (placeholder - returns empty array in v2.0.0)
+
+**Notes:**
+- **Current Implementation (v2.0.0)**: Returns placeholder empty array
+- Response field corrected from `models` to `data` to match frontend expectations (fixed in batch 8, 2025-11-03)
+- Frontend expects `response.data` to be an array for dashboard model statistics display
+- Future implementation will include per-model usage metrics aggregated from Redis
 
 ---
 
