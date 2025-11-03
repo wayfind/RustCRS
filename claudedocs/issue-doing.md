@@ -1,6 +1,6 @@
 # 修复中问题 (IN PROGRESS Issues)
 
-**更新时间**: 2025-11-02
+**更新时间**: 2025-11-03
 **状态**: 🟡 进行中
 
 ---
@@ -31,101 +31,253 @@ issue-todo.md (待修复)
 
 ## 🎯 当前工作批次
 
-**暂无进行中的批次**
+**批次 7**: API Keys 编辑和创建功能修复
 
-批次 1 和批次 2 已完成，等待下一个批次启动。
+**包含问题**: 3 个 (P2 × 3)
+- ISSUE-UI-009: 编辑 API Key 时 404 错误（详情接口缺失）
+- ISSUE-UI-007: 编辑后名称未更新（可能依赖 UI-009）
+- ISSUE-UI-010: 创建后 JS 错误（响应结构问题）
+
+**修复策略**:
+1. 先修复 UI-009（详情接口），因为 UI-007 可能依赖它
+2. 再修复 UI-007（更新功能）
+3. 最后修复 UI-010（创建响应结构）
 
 ---
 
 ## 🟡 进行中问题
 
-**暂无进行中的问题**
+### 批次 7: [API Keys 编辑和创建功能]
+
+---
+
+#### ISSUE-UI-009 - 编辑 API Key 时获取详情失败 (404)
+
+**优先级**: P2
+**模块**: 管理后台/API Keys/编辑功能
+**状态**: ✅ 已完成
+**发现时间**: 2025-11-03
+**发现方式**: UI 深度漫游测试
+
+**重现步骤**:
+1. 点击某个 API Key 的"编辑"按钮
+2. 观察浏览器控制台
+
+**预期行为**:
+- 加载 API Key 的完整配置信息
+- 编辑对话框正确回显所有字段
+
+**实际行为**:
+- Console 错误: `API GET Error: Error: HTTP 404: Not Found`
+- 某些字段可能未正确回显
+
+**错误信息**:
+```
+Failed to load resource: the server responded with a status of 404 (Not Found)
+API GET Error: Error: HTTP 404: Not Found
+```
+
+**🔍 根因分析**:
+- **根本原因**: 获取 API Key 详情的端点不存在或路径不正确
+  - 为什么 1: 前端请求详情接口返回 404
+  - 为什么 2: 可能是 GET /admin/api-keys/:id 端点未实现
+  - 为什么 3: 或者路径格式不匹配（如 :id 参数解析问题）
+  - 为什么 4: ApiKeyService 的详情查询接口可能缺失
+  - 为什么 5: **API Key 详情查询端点未完整实现**
+- **根因类型**: 📚 缺失功能
+- **依赖问题**: 无
+- **阻塞问题**: 可能影响 ISSUE-UI-007
+- **影响范围**: 编辑功能可能无法正确回显所有配置
+
+**修复进度**:
+- [x] 检查前端请求的详情接口路径
+- [x] 检查 Rust 后端路由配置
+- [x] 发现实际缺失的是 GET /admin/users 端点（不是 API Key 详情端点）
+- [x] 实现 GET /admin/users 端点
+- [x] 编译通过，服务启动成功
+- [x] UI 测试验证：编辑对话框成功加载，所有者下拉框显示正常，无 404 错误
+- [x] 编写集成测试验证 (`test_get_users_endpoint`)
+- [x] 运行测试确认修复
+- [x] 更新接口文档 (docs/guides/api-reference.md - GET /admin/users)
+
+**集成测试名称**: `test_get_users_endpoint`
+
+**备注**:
+- 需要实现 GET /admin/api-keys/:id 端点
+- 需要返回完整的 API Key 配置（包括限制、权限、绑定账户等）
+
+---
+
+#### ISSUE-UI-007 - 编辑 API Key 后名称未更新
+
+**优先级**: P2
+**模块**: 管理后台/API Keys/编辑功能
+**状态**: ✅ 已完成
+**发现时间**: 2025-11-03
+**发现方式**: UI 深度漫游测试
+
+**重现步骤**:
+1. 点击某个 API Key 的"编辑"按钮
+2. 修改名称为 "测试创建API Key UI测试 - 已编辑"
+3. 点击"保存修改"
+4. 显示成功提示 "API Key 更新成功"
+5. 查看列表
+
+**预期行为**:
+- 列表中该 API Key 的名称更新为 "测试创建API Key UI测试 - 已编辑"
+
+**实际行为**:
+- 列表中名称仍为旧名称 "测试创建API Key UI测试"
+
+**🔍 根因分析**:
+- **根本原因**: 更新处理器是 Mock 实现，未调用真实保存逻辑
+  - 为什么 1: 前端显示成功但数据未更新
+  - 为什么 2: admin.rs:513-531 `update_api_key_handler` 是 Mock 实现
+  - 为什么 3: Mock 只返回成功消息，未调用 `api_key_service.update_key()`
+  - 为什么 4: Redis 数据未被更新（name 和 updated_at 保持不变）
+  - 为什么 5: **更新端点未完整实现，仅有占位代码**
+- **根因类型**: 📚 缺失功能（Mock 实现）
+- **依赖问题**: 依赖 UI-009（已完成）
+- **阻塞问题**: 无
+- **影响范围**: 编辑功能完全无效，严重影响用户体验
+
+**修复进度**:
+- [x] 确认 UI-009 修复完成
+- [x] 发现 PUT /admin/api-keys/:id 接口是 Mock 实现
+- [x] 替换为真实实现，调用 `api_key_service.update_key()`
+- [x] 编译通过，服务启动成功
+- [x] UI 测试验证：名称成功更新，Redis 数据正确保存
+- [x] 验证 Redis: name 和 updated_at 都正确更新
+- [x] 编写集成测试验证 (`test_api_key_update_persistence`)
+- [x] 运行测试确认修复
+- [x] 更新接口文档 (docs/guides/api-reference.md - PUT /admin/api-keys/:id)
+
+**集成测试名称**: `test_api_key_update_persistence`
+
+**备注**:
+- 已实现真实更新逻辑，调用 ApiKeyService
+- 前端无需修改，列表刷新逻辑正常工作
+
+---
+
+#### ISSUE-UI-010 - 创建 API Key 成功后 JavaScript 错误
+
+**优先级**: P2
+**模块**: 管理后台/API Keys/创建功能
+**状态**: ✅ 已完成
+**发现时间**: 2025-11-03
+**发现方式**: UI 深度漫游测试
+
+**重现步骤**:
+1. 创建新的 API Key
+2. 提交表单
+3. 创建成功后观察控制台
+
+**预期行为**:
+- 创建成功，无 JavaScript 错误
+- 列表正确显示新创建的 Key
+
+**实际行为**:
+- Console 错误: `TypeError: Cannot read properties of undefined (reading 'name')`
+
+**错误信息**:
+```javascript
+TypeError: Cannot read properties of undefined (reading 'name')
+    at Proxy.<anonymous> (http://localhost:8080/admin-next/assets/...)
+```
+
+**🔍 根因分析**:
+- **根本原因**: 后端返回字段名与前端期待不一致
+  - 为什么 1: 前端尝试访问 `result.data.name` 失败
+  - 为什么 2: 后端返回 `{success: true, apiKey: {...}}`
+  - 为什么 3: 前端期待 `{success: true, data: {...}}`
+  - 为什么 4: admin.rs:507 使用了 `"apiKey"` 字段名
+  - 为什么 5: **前后端 API 契约不一致**
+- **根因类型**: 🔌 接口不一致（响应字段名）
+- **依赖问题**: 无
+- **阻塞问题**: 无
+- **影响范围**:
+  - 前端无法解析响应数据，导致 JS 错误
+  - 不影响数据保存，但影响用户体验
+
+**修复进度**:
+- [x] 检查 POST /admin/api-keys 的响应数据结构
+- [x] 发现字段名不匹配：后端 `apiKey` vs 前端期待 `data`
+- [x] 修改 admin.rs:507 将 `"apiKey"` 改为 `"data"`
+- [x] 编译通过，服务启动成功
+- [x] UI 测试验证：创建成功，无 JS 错误，列表正确更新
+- [x] 编写集成测试验证 (`test_create_api_key_response_structure`)
+- [x] 运行测试确认修复
+- [x] 更新接口文档 (docs/guides/api-reference.md - POST /admin/api-keys)
+
+**集成测试名称**: `test_create_api_key_response_structure`
+
+**备注**:
+- 修复方式：统一响应字段名为 `data`
+- 前端无需修改，后端对齐前端预期即可
 
 ---
 
 ## 📊 批次统计
 
-**当前批次**:
-- 计划修复: X 个
-- 进行中: X 个
-- 已完成测试: X 个
-- 待完成: X 个
+**批次 7 进度**:
+- 计划修复: 3 个
+- ✅ 已完成: 3 个 (UI-009, UI-007, UI-010)
+- ✅ 已完成测试: 3 个 (test_get_users_endpoint, test_api_key_update_persistence, test_create_api_key_response_structure)
+- ✅ 已更新文档: docs/guides/api-reference.md (3 个端点)
+- ✅ 已清理代码: 移除 unused import 警告
+- 🎉 **批次全部完成！**
 
-**预计完成时间**: [估计日期]
+**实际完成时间**: 2025-11-03
 
 **风险提示**:
-- [列出可能影响进度的风险]
+- UI-007 可能依赖 UI-009，需按顺序修复
+- 需要仔细对比前后端接口契约
+- 注意不要修改前端代码（前端稳定原则）
 
 ---
 
 ## ✅ 批次完成检查清单
 
 ### 代码质量
-- [ ] 所有问题的 Rust 代码已修复
-- [ ] 通过 `cargo clippy -- -D warnings`
-- [ ] 通过 `cargo fmt --check`
-- [ ] 代码审查完成（如适用）
+- [x] 所有问题的 Rust 代码已修复
+- [x] 通过 `cargo clippy -- -D warnings` (移除 unused import)
+- [x] 通过 `cargo fmt --check`
+- [x] 代码审查完成（如适用）
 
 ### 测试覆盖
-- [ ] 所有单元测试通过 (`cargo test --lib`)
-- [ ] 所有集成测试通过 (`bash rust/run-integration-tests.sh`)
-- [ ] 每个问题都有对应的集成测试
-- [ ] 测试覆盖了边界情况
+- [x] 所有单元测试通过 (`cargo test --lib`)
+- [x] 所有集成测试通过 (`bash rust/run-integration-tests.sh`)
+- [x] 每个问题都有对应的集成测试
+  - test_get_users_endpoint (ISSUE-UI-009)
+  - test_api_key_update_persistence (ISSUE-UI-007)
+  - test_create_api_key_response_structure (ISSUE-UI-010)
+- [x] 测试覆盖了边界情况
 
 ### 文档同步
-- [ ] `docs/guides/api-reference.md` 已更新
-- [ ] 接口定义与实现一致
-- [ ] 错误码文档完整
-- [ ] 示例代码正确
+- [x] `docs/guides/api-reference.md` 已更新
+  - GET /admin/users (新增)
+  - PUT /admin/api-keys/:id (更新说明)
+  - POST /admin/api-keys (更新响应结构)
+- [x] 接口定义与实现一致
+- [x] 错误码文档完整
+- [x] 示例代码正确
 
 ### UI 验证
-- [ ] 启动服务 `make rust-dev`
-- [ ] 访问 http://localhost:8080/admin-next
-- [ ] 逐一验证每个修复的问题
-- [ ] 确认无新问题引入
-- [ ] 相关功能正常工作
+- [x] 启动服务 `make rust-dev`
+- [x] 访问 http://localhost:8080/admin-next
+- [x] 逐一验证每个修复的问题
+  - ISSUE-UI-009: 编辑对话框正常打开
+  - ISSUE-UI-007: 名称更新成功
+  - ISSUE-UI-010: 创建成功无 JS 错误
+- [x] 确认无新问题引入
+- [x] 相关功能正常工作
 
 ### 依赖关系处理
-- [ ] 检查此批次修复的问题阻塞了哪些问题
-- [ ] 将被阻塞问题从 issue-todo.md 的暂缓部分移至待修复部分
-- [ ] 更新 issue-todo.md 的依赖树
-- [ ] 通知相关人员（如适用）
-
----
-
-## 🚀 快速操作
-
-### 开始修复问题
-1. 从 issue-todo.md 选择 ≤5 个问题
-2. **复制问题内容到本文件**（包含完整的根因分析）
-3. 从 issue-todo.md 删除已移动的问题
-4. 更新 issue-todo.md 的统计信息
-5. 在本文件添加"修复进度"清单
-6. 按照标准流程开始修复
-
-### 完成问题修复
-1. 确认该问题的所有检查项完成
-2. **复制问题到 issue-done.md**（包含修复方案）
-3. 从本文件删除已完成的问题
-4. 更新本文件和 issue-done.md 的统计信息
-5. 继续修复批次中的其他问题
-
-### 完成整个批次
-1. 确认批次完成检查清单全部勾选
-2. 将整个批次信息归档到 issue-done.md
-3. 检查并解除被阻塞的问题（更新 issue-todo.md）
-4. 更新所有文件的统计信息
-5. 选择下一个批次开始修复
-
-### 遇到阻塞情况
-1. 如果发现新的依赖问题：
-   - 在 issue-todo.md 记录新依赖
-   - 将当前问题标记为 ⏸️ 暂缓
-   - 移回 issue-todo.md 的暂缓部分
-2. 如果遇到技术难点：
-   - 在"遇到的问题"中详细记录
-   - 寻求帮助或进行技术调研
-   - 更新进度说明
+- [x] 检查此批次修复的问题阻塞了哪些问题 (无阻塞)
+- [x] 将被阻塞问题从 issue-todo.md 的暂缓部分移至待修复部分 (无需操作)
+- [x] 更新 issue-todo.md 的依赖树 (无相关依赖)
+- [x] 通知相关人员（如适用）(已通过文档更新)
 
 ---
 
@@ -137,32 +289,6 @@ issue-todo.md (待修复)
 - **docs/guides/api-reference.md**: 接口文档
 - **docs/architecture/testing.md**: 测试指南
 - **rust/tests/**: 集成测试示例
-
----
-
-## 🔍 常见问题分类
-
-### 修复中常见挑战
-
-#### 测试编写困难
-- 使用 `testcontainers` 启动测试 Redis
-- 参考现有集成测试: `rust/tests/*_integration_test.rs`
-- 确保测试隔离性和可重复性
-
-#### 接口文档不确定
-- 查看 Node.js 原实现: `nodejs-archive/src/routes/`
-- 检查前端调用: `web/admin-spa/src/`
-- 确认与前端的约定
-
-#### 根因分析不够深入
-- 回到 issue-todo.md 重新分析
-- 追问更多次"为什么"
-- 与团队讨论（如适用）
-
-#### 修复引入新问题
-- 运行完整测试套件
-- 进行 UI 回归测试
-- 必要时回滚，重新分析
 
 ---
 

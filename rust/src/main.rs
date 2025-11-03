@@ -1,6 +1,6 @@
 use anyhow::Result;
 use axum::{
-    response::{IntoResponse, Redirect},
+    response::Redirect,
     routing::get,
     Router,
 };

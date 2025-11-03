@@ -1419,7 +1419,8 @@ Create a new API Key (admin).
 ```json
 {
   "success": true,
-  "apiKey": {
+  "message": "API Key创建成功",
+  "data": {
     "id": "key_789",
     "key": "cr_new_api_key_here",
     "name": "Customer Key",
@@ -1435,6 +1436,11 @@ Create a new API Key (admin).
   }
 }
 ```
+
+**Notes:**
+- Response field changed from `apiKey` to `data` for frontend consistency (Batch 7 - ISSUE-UI-010)
+- The actual API key value is only returned once during creation
+- Frontend expects `result.data` structure for proper handling
 
 ---
 
@@ -1470,12 +1476,13 @@ Update an API Key.
 
 **Authentication:** Admin Token
 
+**Description:** Updates API Key properties and persists changes to Redis. Calls `ApiKeyService.update_key()` for real implementation (Batch 7 - ISSUE-UI-007).
+
 **Request Body:**
 ```json
 {
   "name": "Updated Key Name",
-  "tokenLimit": 2000000,
-  "isActive": true
+  "description": "Updated description (optional)"
 }
 ```
 
@@ -1483,26 +1490,118 @@ Update an API Key.
 ```json
 {
   "success": true,
-  "message": "API key updated",
-  "apiKey": { ... }
+  "message": "API Key更新成功",
+  "apiKey": {
+    "id": "key_123",
+    "name": "Updated Key Name",
+    "description": "Updated description",
+    "updatedAt": "2025-11-03T08:00:00Z",
+    ...
+  }
 }
 ```
+
+**Notes:**
+- Real implementation replaces previous mock placeholder
+- Updates both `name` and `updated_at` timestamp in Redis
+- Frontend automatically refreshes list to show updated name
+- Only `name` and `description` fields are currently supported for updates
 
 ---
 
 ### DELETE /admin/api-keys/:id
 
-Delete an API Key.
+Delete an API Key (soft delete).
 
-**Authentication:** Admin Token
+**Authentication:** Admin Token (JWT)
+
+**Description:** Performs a soft delete by setting `is_deleted = true`, recording `deleted_at` timestamp and `deleted_by` user. The key remains in the database but is excluded from active key lists.
 
 **Response:**
 ```json
 {
   "success": true,
-  "message": "API key deleted"
+  "message": "API Key删除成功"
 }
 ```
+
+**Notes:**
+- Soft delete: Key is marked as deleted but not permanently removed
+- Deleted keys can be restored via restore endpoint
+- `deleted_at` and `deleted_by` fields are automatically set
+
+---
+
+### GET /admin/api-keys/tags
+
+Get all unique tags from API Keys (deduplicated and sorted).
+
+**Authentication:** Admin Token (JWT)
+
+**Description:** Collects all tags from all non-deleted API Keys, removes duplicates, and returns them in alphabetical order.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": ["development", "production", "team-a", "team-b"]
+}
+```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `data` (array of strings): Unique tags, sorted alphabetically
+
+**Use Cases:**
+- Tag selection UI in key creation/editing forms
+- Tag-based filtering and organization
+- Tag autocomplete features
+
+---
+
+### GET /admin/users
+
+Get list of users for API Key owner selection.
+
+**Authentication:** Admin Token (JWT)
+
+**Description:** Returns list of available users that can be assigned as API Key owners. Currently returns the default admin user. Added in Batch 7 (ISSUE-UI-009) to support Edit API Key dialog owner dropdown.
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "admin",
+      "username": "admin",
+      "displayName": "Admin",
+      "email": "",
+      "role": "admin"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `data` (array of objects): List of user objects
+  - `id` (string): User unique identifier
+  - `username` (string): User login name
+  - `displayName` (string): User display name for UI
+  - `email` (string): User email (may be empty)
+  - `role` (string): User role (e.g., "admin")
+
+**Use Cases:**
+- Populate owner dropdown in API Key edit dialog
+- User selection in key creation forms
+- Owner assignment and management
+
+**Notes:**
+- Currently returns single default admin user
+- Frontend calls this endpoint when opening Edit API Key dialog
+- Frontend has fallback user list if request fails
+- Future enhancement: Support multiple users and user management
 
 ---
 
@@ -1510,35 +1609,159 @@ Delete an API Key.
 
 Get system dashboard statistics.
 
-**Authentication:** Admin Token
+**Authentication:** Admin Token (JWT)
 
 **Response:**
 ```json
 {
   "success": true,
-  "stats": {
-    "totalKeys": 50,
-    "activeKeys": 45,
-    "totalUsage": {
-      "requests": 10000,
-      "tokens": 5000000,
-      "cost": 50.0
-    },
-    "todayUsage": { ... },
-    "claudeAccounts": {
-      "total": 5,
-      "active": 4
-    },
-    "geminiAccounts": { ... },
-    "openaiAccounts": { ... },
-    "systemInfo": {
-      "version": "1.1.187",
+  "data": {
+    "overview": {
+      "totalKeys": 50,
+      "activeKeys": 45,
+      "totalAccounts": 10,
+      "activeAccounts": 8,
+      "todayRequests": 1500,
+      "totalRequests": 100000,
+      "systemStatus": "正常",
       "uptime": 86400,
-      "memory": { ... }
+      "todayTokens": {
+        "total": 500000,
+        "input": 300000,
+        "output": 200000,
+        "cost": 5.0
+      },
+      "totalTokens": {
+        "total": 50000000,
+        "input": 30000000,
+        "output": 20000000,
+        "cost": 500.0
+      },
+      "realtime": {
+        "rpm": 150,
+        "tpm": 50000,
+        "window": 5
+      }
+    },
+    "recentActivity": {},
+    "systemAverages": {},
+    "realtimeMetrics": {},
+    "systemHealth": {}
+  }
+}
+```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `data.overview` (object): Main dashboard statistics
+  - `totalKeys` (number): Total API keys count
+  - `activeKeys` (number): Active API keys count
+  - `totalAccounts` (number): Total provider accounts
+  - `activeAccounts` (number): Active provider accounts
+  - `todayRequests` (number): Requests today
+  - `totalRequests` (number): All-time requests
+  - `systemStatus` (string): System health status
+  - `uptime` (number): System uptime in seconds
+  - `todayTokens` (object): Today's token usage
+  - `totalTokens` (object): All-time token usage
+  - `realtime` (object): Real-time metrics (RPM, TPM)
+
+**Notes:**
+- Response structure changed in v2.0: `stats` → `data.overview`
+- Placeholder data returned for some fields (work in progress)
+
+---
+
+### GET /admin/usage-costs
+
+Get usage costs statistics for different time periods.
+
+**Authentication:** Admin Token (JWT)
+
+**Query Parameters:**
+- `period` (string, required): Time period - `today`, `week`, `month`, or `all`
+
+**Request Example:**
+```
+GET /admin/usage-costs?period=today
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "period": "today",
+  "data": {
+    "totalCosts": {
+      "totalCost": 5.25,
+      "inputTokens": 300000,
+      "outputTokens": 200000,
+      "requests": 1500,
+      "formatted": {
+        "totalCost": "$5.250000"
+      }
     }
   }
 }
 ```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `period` (string): Requested time period
+- `data.totalCosts` (object): Cost statistics
+  - `totalCost` (number): Total cost in USD
+  - `inputTokens` (number): Total input tokens
+  - `outputTokens` (number): Total output tokens
+  - `requests` (number): Total requests
+  - `formatted.totalCost` (string): Formatted cost string
+
+**Notes:**
+- Response structure changed in v2.0: `costs` → `data.totalCosts`
+- Added `formatted` field for display purposes
+
+---
+
+### GET /admin/account-usage-trend
+
+Get account usage trend data for a specific account group.
+
+**Authentication:** Admin Token (JWT)
+
+**Query Parameters:**
+- `group` (string, required): Account group - `claude`, `gemini`, `openai`, etc.
+- `granularity` (string, required): Time granularity - `hour`, `day`, `week`, `month`
+- `days` (number, required): Number of days to look back
+
+**Request Example:**
+```
+GET /admin/account-usage-trend?group=claude&granularity=day&days=7
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "group": "claude",
+  "granularity": "day",
+  "data": [],
+  "topAccounts": [],
+  "totalAccounts": 0,
+  "groupLabel": ""
+}
+```
+
+**Response Fields:**
+- `success` (boolean): Operation success status
+- `group` (string): Account group identifier
+- `granularity` (string): Time granularity used
+- `data` (array): Trend data points (placeholder for now)
+- `topAccounts` (array): Top accounts by usage
+- `totalAccounts` (number): Total accounts in group
+- `groupLabel` (string): Human-readable group label
+
+**Notes:**
+- Response structure changed in v2.0: `accounts` → `data`
+- Currently returns placeholder data (work in progress)
 
 ---
 

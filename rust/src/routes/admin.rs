@@ -184,9 +184,12 @@ pub fn create_admin_routes(
         .route("/api-keys/:id", put(update_api_key_handler))
         .route("/api-keys/:id", delete(delete_api_key_handler))
         .route("/api-keys/:id/toggle", put(toggle_api_key_handler))
+        .route("/api-keys/tags", get(get_api_keys_tags_handler))
         // 客户端和分组管理
         .route("/supported-clients", get(get_supported_clients_handler))
         .route("/account-groups", get(get_account_groups_handler))
+        // 用户管理
+        .route("/users", get(get_users_handler))
         // 统计
         .route("/stats/overview", get(get_stats_overview_handler))
         .route("/usage-costs", get(get_usage_costs_handler))
@@ -284,35 +287,42 @@ async fn update_oem_settings_handler(
 async fn get_dashboard_handler() -> Result<impl IntoResponse, AppError> {
     info!("📊 Getting dashboard data");
 
-    // Mock数据 - 返回空的统计信息
+    // Mock数据 - 返回符合前端期望的数据结构
+    // 前端期望: data.overview, data.recentActivity, data.systemAverages, data.realtimeMetrics, data.systemHealth
     let dashboard = json!({
         "success": true,
-        "stats": {
-            "totalKeys": 0,
-            "activeKeys": 0,
-            "totalAccounts": 0,
-            "activeAccounts": 0,
-            "todayRequests": 0,
-            "totalRequests": 0,
-            "systemStatus": "正常",
-            "uptime": 0,
-            "todayTokens": {
-                "total": 0,
-                "input": 0,
-                "output": 0,
-                "cost": 0.0
+        "data": {
+            "overview": {
+                "totalKeys": 0,
+                "activeKeys": 0,
+                "totalAccounts": 0,
+                "activeAccounts": 0,
+                "todayRequests": 0,
+                "totalRequests": 0,
+                "systemStatus": "正常",
+                "uptime": 0,
+                "todayTokens": {
+                    "total": 0,
+                    "input": 0,
+                    "output": 0,
+                    "cost": 0.0
+                },
+                "totalTokens": {
+                    "total": 0,
+                    "input": 0,
+                    "output": 0,
+                    "cost": 0.0
+                },
+                "realtime": {
+                    "rpm": 0,
+                    "tpm": 0,
+                    "window": 5
+                }
             },
-            "totalTokens": {
-                "total": 0,
-                "input": 0,
-                "output": 0,
-                "cost": 0.0
-            },
-            "realtime": {
-                "rpm": 0,
-                "tpm": 0,
-                "window": 5
-            }
+            "recentActivity": {},
+            "systemAverages": {},
+            "realtimeMetrics": {},
+            "systemHealth": {}
         }
     });
 
@@ -494,36 +504,50 @@ async fn create_api_key_handler(
     let response = json!({
         "success": true,
         "message": "API Key创建成功",
-        "apiKey": response_key
+        "data": response_key  // 改为 data 字段，与前端期待的字段名一致
     });
 
     Ok((StatusCode::OK, Json(response)))
 }
 
-/// 更新API Key（Mock实现）
+/// 更新API Key
 async fn update_api_key_handler(
+    State(state): State<Arc<AdminRouteState>>,
     Path(id): Path<String>,
     Json(key_request): Json<ApiKeyRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    info!("🔄 Updating API key: {}", id);
+    info!("🔄 Updating API key: {} with name: {}", id, key_request.name);
+
+    // 调用 ApiKeyService 的更新方法
+    // 目前只支持更新 name 和 is_active
+    // ApiKeyRequest 不包含 is_active 字段，所以传 None（保持原状态）
+    let updated_key = state
+        .api_key_service
+        .update_key(&id, Some(key_request.name), None)
+        .await?;
 
     let response = json!({
         "success": true,
         "message": "API Key更新成功",
-        "apiKey": {
-            "id": id,
-            "name": key_request.name,
-            "description": key_request.description,
-            "tokenLimit": key_request.token_limit.unwrap_or(1000000)
-        }
+        "apiKey": updated_key
     });
 
     Ok((StatusCode::OK, Json(response)))
 }
 
-/// 删除API Key（Mock实现）
-async fn delete_api_key_handler(Path(id): Path<String>) -> Result<impl IntoResponse, AppError> {
-    info!("🗑️  Deleting API key: {}", id);
+/// 删除API Key（软删除）
+async fn delete_api_key_handler(
+    State(state): State<Arc<AdminRouteState>>,
+    jwt_state: axum::Extension<JwtAuthState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("🗑️  Deleting API key: {} by user: {}", id, jwt_state.claims.sub);
+
+    // 调用 ApiKeyService 的软删除方法
+    state
+        .api_key_service
+        .delete_key(&id, &jwt_state.claims.sub)
+        .await?;
 
     let response = json!({
         "success": true,
@@ -549,55 +573,207 @@ async fn toggle_api_key_handler(Path(id): Path<String>) -> Result<impl IntoRespo
     Ok((StatusCode::OK, Json(response)))
 }
 
+/// 获取所有 API Keys 的标签列表
+///
+/// 收集所有 API Keys 的标签，去重并排序返回
+async fn get_api_keys_tags_handler(
+    State(state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("📋 Fetching API keys tags");
+
+    // 1. 获取所有 API Keys（不包括已删除）
+    let api_keys = state.api_key_service.get_all_keys(false).await?;
+
+    // 2. 收集所有标签（使用 HashSet 自动去重）
+    let mut tag_set = std::collections::HashSet::new();
+    for api_key in api_keys {
+        for tag in api_key.tags {
+            let trimmed = tag.trim();
+            if !trimmed.is_empty() {
+                tag_set.insert(trimmed.to_string());
+            }
+        }
+    }
+
+    // 3. 转换为向量并排序
+    let mut tags: Vec<String> = tag_set.into_iter().collect();
+    tags.sort();
+
+    info!("📋 Retrieved {} unique tags from API keys", tags.len());
+
+    let response = json!({
+        "success": true,
+        "data": tags
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
+// ============================================================================
+// User Management Handlers
+// ============================================================================
+
+/// 获取用户列表
+///
+/// 返回系统中所有用户的列表，供前端下拉选择使用
+async fn get_users_handler(
+    State(_state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("📋 Fetching users list");
+
+    // 目前只返回默认的 admin 用户
+    // 未来可以扩展为从 UserService 获取完整的用户列表
+    let users = vec![
+        serde_json::json!({
+            "id": "admin",
+            "username": "admin",
+            "displayName": "Admin",
+            "email": "",
+            "role": "admin"
+        })
+    ];
+
+    info!("📋 Retrieved {} users", users.len());
+
+    let response = json!({
+        "success": true,
+        "data": users
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
 // ============================================================================
 // Statistics Handlers
 // ============================================================================
 
 /// 获取统计概览
+///
+/// 聚合所有 API Keys 的使用统计数据，返回总体概览
 async fn get_stats_overview_handler(
-    State(_state): State<Arc<AdminRouteState>>,
+    State(state): State<Arc<AdminRouteState>>,
 ) -> Result<impl IntoResponse, AppError> {
     info!("📊 Fetching stats overview");
 
-    // 简化版统计：返回占位数据
-    // TODO: 完整实现需要从 Redis 聚合 API Keys 使用量
+    // 1. 获取所有 API Keys（不包括已删除）
+    let all_keys = state.api_key_service.get_all_keys(false).await?;
+
+    // 2. 统计活跃 API Keys 数量
+    let total_api_keys = all_keys.len() as i64;
+    let active_api_keys = all_keys.iter().filter(|k| k.is_active && !k.is_deleted).count() as i64;
+
+    // 3. 聚合所有 API Keys 的使用量
+    let mut total_requests = 0i64;
+    let mut total_input_tokens = 0i64;
+    let mut total_output_tokens = 0i64;
+    let mut total_cache_creation_tokens = 0i64;
+    let mut total_cache_read_tokens = 0i64;
+    let mut total_cost = 0.0f64;
+
+    for api_key in &all_keys {
+        // 获取每个 key 的使用统计
+        if let Ok(usage_stats) = state.api_key_service.get_usage_stats(&api_key.id).await {
+            total_requests += usage_stats.total_requests;
+            total_input_tokens += usage_stats.total_input_tokens;
+            total_output_tokens += usage_stats.total_output_tokens;
+            total_cache_creation_tokens += usage_stats.total_cache_creation_tokens;
+            total_cache_read_tokens += usage_stats.total_cache_read_tokens;
+            total_cost += usage_stats.total_cost;
+        }
+    }
+
+    // 4. 构建响应
     let stats = serde_json::json!({
         "success": true,
         "stats": {
-            "totalApiKeys": 0,
-            "activeApiKeys": 0,
+            "totalApiKeys": total_api_keys,
+            "activeApiKeys": active_api_keys,
             "totalUsage": {
-                "requests": 0,
-                "inputTokens": 0,
-                "outputTokens": 0,
-                "totalCost": 0.0
+                "requests": total_requests,
+                "inputTokens": total_input_tokens,
+                "outputTokens": total_output_tokens,
+                "cacheCreationTokens": total_cache_creation_tokens,
+                "cacheReadTokens": total_cache_read_tokens,
+                "totalCost": total_cost
             }
         }
     });
+
+    info!("📊 Stats overview: {} total keys, {} active keys, {} total requests",
+          total_api_keys, active_api_keys, total_requests);
 
     Ok((StatusCode::OK, Json(stats)))
 }
 
 /// 获取使用成本统计
+///
+/// 按时间维度（today/week/month）聚合所有 API Keys 的成本数据
 async fn get_usage_costs_handler(
-    State(_state): State<Arc<AdminRouteState>>,
+    State(state): State<Arc<AdminRouteState>>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Result<impl IntoResponse, AppError> {
     let period = params.get("period").map(|s| s.as_str()).unwrap_or("today");
     info!("📊 Fetching usage costs for period: {}", period);
 
-    // 占位数据 - 返回基础成本结构
-    // TODO: 从 Redis 聚合实际使用量和成本
+    // 1. 获取所有 API Keys（不包括已删除）
+    let all_keys = state.api_key_service.get_all_keys(false).await?;
+
+    // 2. 根据时间维度聚合数据
+    let mut total_cost = 0.0f64;
+    let mut total_input_tokens = 0i64;
+    let mut total_output_tokens = 0i64;
+    let mut total_requests = 0i64;
+
+    for api_key in &all_keys {
+        if let Ok(usage_stats) = state.api_key_service.get_usage_stats(&api_key.id).await {
+            // 根据 period 参数选择对应的统计字段
+            match period {
+                "today" => {
+                    // 使用每日成本
+                    total_cost += usage_stats.daily_cost;
+                    // 注意：当前 ApiKeyUsageStats 没有每日 tokens 字段，使用总量作为近似
+                    // 完整实现需要在 Redis 中按日期存储 tokens
+                    total_input_tokens += usage_stats.total_input_tokens;
+                    total_output_tokens += usage_stats.total_output_tokens;
+                    total_requests += usage_stats.total_requests;
+                }
+                "week" => {
+                    // 使用每周成本
+                    total_cost += usage_stats.weekly_opus_cost;
+                    total_input_tokens += usage_stats.total_input_tokens;
+                    total_output_tokens += usage_stats.total_output_tokens;
+                    total_requests += usage_stats.total_requests;
+                }
+                _ => {
+                    // 默认使用总成本（month/all）
+                    total_cost += usage_stats.total_cost;
+                    total_input_tokens += usage_stats.total_input_tokens;
+                    total_output_tokens += usage_stats.total_output_tokens;
+                    total_requests += usage_stats.total_requests;
+                }
+            }
+        }
+    }
+
+    // 3. 构建响应（匹配前端期望的结构）
     let costs = serde_json::json!({
         "success": true,
         "period": period,
-        "costs": {
-            "totalCost": 0.0,
-            "inputTokens": 0,
-            "outputTokens": 0,
-            "requests": 0
+        "data": {
+            "totalCosts": {
+                "totalCost": total_cost,
+                "inputTokens": total_input_tokens,
+                "outputTokens": total_output_tokens,
+                "requests": total_requests,
+                "formatted": {
+                    "totalCost": format!("${:.6}", total_cost)
+                }
+            }
         }
     });
+
+    info!("📊 Usage costs for period '{}': ${:.4}, {} requests",
+          period, total_cost, total_requests);
 
     Ok((StatusCode::OK, Json(costs)))
 }
@@ -651,13 +827,17 @@ async fn get_account_usage_trend_handler(
     let group = params.get("group").map(|s| s.as_str()).unwrap_or("claude");
     info!("📊 Fetching account usage trend: group={}, granularity={}, days={}", group, granularity, days);
 
-    // 占位数据 - 返回空账号趋势
+    // 占位数据 - 返回符合前端期望的结构
+    // 前端期望: data, topAccounts, totalAccounts, group, groupLabel
     // TODO: 按账号维度聚合 Redis 数据
     let trend = serde_json::json!({
         "success": true,
         "group": group,
         "granularity": granularity,
-        "accounts": []
+        "data": [],           // 前端期望 response.data
+        "topAccounts": [],    // 前端期望 response.topAccounts
+        "totalAccounts": 0,   // 前端期望 response.totalAccounts
+        "groupLabel": ""      // 前端期望 response.groupLabel
     });
 
     Ok((StatusCode::OK, Json(trend)))
@@ -805,42 +985,140 @@ async fn list_ccr_accounts_handler(
     Ok((StatusCode::OK, Json(serde_json::json!({ "success": true, "data": [] }))))
 }
 
-/// 检查更新处理器（占位实现）
+/// 检查更新处理器
 ///
-/// 返回当前版本信息，不实际检查 GitHub
-/// TODO: 实现完整的版本检查功能
-/// - 读取 VERSION 文件
-/// - 从 GitHub API 获取最新版本
-/// - 比较版本并返回更新信息
-/// - 使用 Redis 缓存结果（1小时）
+/// 从 VERSION 文件读取当前版本，从 GitHub API 获取最新版本（带 Redis 缓存）
 async fn check_updates_handler(
     State(_state): State<Arc<AdminRouteState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    info!("🔄 Checking for updates (placeholder)");
+    info!("🔄 Checking for updates");
 
-    // 占位实现：返回当前版本，不检查 GitHub
-    // 前端期望的响应格式：
-    // {
-    //   "success": true,
-    //   "data": {
-    //     "current": "2.0.0",
-    //     "latest": "2.0.0",
-    //     "hasUpdate": false,
-    //     "releaseInfo": null
-    //   }
-    // }
+    // 1. 读取当前版本（从 VERSION 文件）
+    let current_version = match tokio::fs::read_to_string("VERSION").await {
+        Ok(content) => content.trim().to_string(),
+        Err(e) => {
+            // VERSION 文件不存在或读取失败，从 Cargo.toml 获取
+            tracing::warn!("Failed to read VERSION file: {}, using Cargo.toml version", e);
+            env!("CARGO_PKG_VERSION").to_string()
+        }
+    };
+
+    // 2. 从 GitHub API 获取最新版本（简化版：不使用 Redis 缓存）
+    // TODO: 添加 Redis 缓存以减少 GitHub API 调用
+    let latest_version = match fetch_latest_version_from_github().await {
+        Ok(version) => {
+            info!("🔄 Fetched latest version from GitHub: {}", version);
+            version
+        }
+        Err(e) => {
+            tracing::warn!("Failed to fetch latest version from GitHub: {}, using current as fallback", e);
+            // GitHub API 失败，使用当前版本作为 fallback
+            current_version.clone()
+        }
+    };
+
+    // 3. 比较版本
+    let has_update = compare_versions(&current_version, &latest_version);
+
+    // 4. 构建响应
     let version_info = serde_json::json!({
         "success": true,
         "data": {
-            "current": "2.0.0",
-            "latest": "2.0.0",
-            "hasUpdate": false,
-            "releaseInfo": null,
+            "current": current_version,
+            "latest": latest_version,
+            "hasUpdate": has_update,
+            "releaseInfo": if has_update {
+                Some(format!("New version {} is available", latest_version))
+            } else {
+                None
+            },
             "cached": false
         }
     });
 
+    if has_update {
+        info!("🔄 Update available: {} -> {}", current_version, latest_version);
+    } else {
+        info!("🔄 Already on latest version: {}", current_version);
+    }
+
     Ok((StatusCode::OK, Json(version_info)))
+}
+
+/// 从 GitHub API 获取最新版本号
+///
+/// 查询 GitHub Releases API 获取最新发布版本
+async fn fetch_latest_version_from_github() -> Result<String, AppError> {
+    // GitHub API endpoint (假设仓库为 anthropics/claude-relay-service)
+    // 实际项目应该从配置中读取仓库信息
+    let url = "https://api.github.com/repos/anthropics/claude-relay-service/releases/latest";
+
+    let client = reqwest::Client::builder()
+        .user_agent("claude-relay-service")
+        .timeout(std::time::Duration::from_secs(10))
+        .build()
+        .map_err(|e| AppError::InternalError(format!("Failed to create HTTP client: {}", e)))?;
+
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| AppError::InternalError(format!("Failed to fetch from GitHub: {}", e)))?;
+
+    if !response.status().is_success() {
+        return Err(AppError::InternalError(format!(
+            "GitHub API returned status: {}",
+            response.status()
+        )));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| AppError::InternalError(format!("Failed to parse GitHub response: {}", e)))?;
+
+    // 从响应中提取 tag_name (例如 "v1.1.187" 或 "1.1.187")
+    let tag_name = json
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| AppError::InternalError("No tag_name in GitHub response".to_string()))?;
+
+    // 移除 "v" 前缀（如果存在）
+    let version = tag_name.strip_prefix('v').unwrap_or(tag_name).to_string();
+
+    Ok(version)
+}
+
+/// 比较版本号
+///
+/// 简单的版本号比较（假设格式为 "major.minor.patch"）
+/// 返回 true 如果 latest > current
+fn compare_versions(current: &str, latest: &str) -> bool {
+    // 简单实现：按字符串比较
+    // 完整实现应该使用 semver crate 进行语义化版本比较
+    let current_parts: Vec<u32> = current
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    let latest_parts: Vec<u32> = latest
+        .split('.')
+        .filter_map(|s| s.parse().ok())
+        .collect();
+
+    // 逐段比较
+    for i in 0..std::cmp::max(current_parts.len(), latest_parts.len()) {
+        let current_part = current_parts.get(i).copied().unwrap_or(0);
+        let latest_part = latest_parts.get(i).copied().unwrap_or(0);
+
+        if latest_part > current_part {
+            return true;
+        } else if latest_part < current_part {
+            return false;
+        }
+    }
+
+    false
 }
 
 // ============================================================================
