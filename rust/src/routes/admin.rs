@@ -185,6 +185,7 @@ pub fn create_admin_routes(
         .route("/api-keys/:id", delete(delete_api_key_handler))
         .route("/api-keys/:id/toggle", put(toggle_api_key_handler))
         .route("/api-keys/tags", get(get_api_keys_tags_handler))
+        .route("/tags", get(get_api_keys_tags_handler)) // Alias for frontend compatibility (ISSUE-UI-004)
         // 客户端和分组管理
         .route("/supported-clients", get(get_supported_clients_handler))
         .route("/account-groups", get(get_account_groups_handler))

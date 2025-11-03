@@ -1534,6 +1534,8 @@ Delete an API Key (soft delete).
 
 ### GET /admin/api-keys/tags
 
+**Alias:** `GET /admin/tags` (added in v2.0.0 batch 9, ISSUE-UI-004)
+
 Get all unique tags from API Keys (deduplicated and sorted).
 
 **Authentication:** Admin Token (JWT)
