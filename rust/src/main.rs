@@ -200,17 +200,34 @@ async fn main() -> Result<()> {
         redis: redis_arc,
         settings: settings_arc,
         account_service,
-        api_key_service,
+        api_key_service: api_key_service.clone(),
         scheduler,
         unified_openai_scheduler,
     };
 
     // Setup static file serving for Vue SPA
-    let static_dir = PathBuf::from("../web/admin-spa/dist");
+    // Use absolute path based on CARGO_MANIFEST_DIR or fallback to relative path
+    let static_dir = if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        PathBuf::from(manifest_dir).parent().unwrap().join("web/admin-spa/dist")
+    } else {
+        // Fallback: try to detect from executable location
+        let exe_path = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+        exe_path.parent().and_then(|p| p.parent()).map(|p| p.join("web/admin-spa/dist"))
+            .unwrap_or_else(|| PathBuf::from("../web/admin-spa/dist"))
+    };
+
     let serve_dir = ServeDir::new(&static_dir)
         .not_found_service(ServeDir::new(&static_dir).append_index_html_on_directories(true));
 
     info!("📁 Static files serving from: {}", static_dir.display());
+
+    // Verify static directory exists
+    if !static_dir.exists() {
+        error!("⚠️  Static directory does not exist: {}", static_dir.display());
+        error!("⚠️  Frontend UI will not be available!");
+    } else {
+        info!("✅ Static directory verified: {}", static_dir.display());
+    }
 
     // Build router
     let app = Router::new()
@@ -218,8 +235,14 @@ async fn main() -> Result<()> {
         .route("/health", get(health_check))
         .route("/ping", get(ping))
         .with_state(health_state)
-        .nest("/admin", create_admin_routes(admin_service.clone()))
-        .nest("/web", create_admin_routes(admin_service)) // For frontend compatibility
+        .nest(
+            "/admin",
+            create_admin_routes(admin_service.clone(), api_key_service.clone()),
+        )
+        .nest(
+            "/web",
+            create_admin_routes(admin_service, api_key_service),
+        ) // For frontend compatibility
         .nest("/api", create_api_router(api_state.clone()))
         .nest("/claude", create_api_router(api_state))
         .nest("/gemini", create_gemini_router(gemini_state))
