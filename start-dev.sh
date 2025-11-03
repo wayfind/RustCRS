@@ -140,14 +140,13 @@ case $rust_mode in
         ;;
 esac
 
-# 如果用户选择跳过，询问是否启动前端
+# 检查前端是否已构建
 if [ "$rust_mode" = "3" ]; then
-    echo "🎨 是否启动前端界面?"
-    read -p "启动前端? [y/N]: " start_frontend
+    echo ""
+    echo "📦 检查前端构建状态..."
 
-    if [[ "$start_frontend" =~ ^[Yy]$ ]]; then
-        echo ""
-        echo "🚀 启动前端界面..."
+    if [ ! -d "web/admin-spa/dist" ] || [ ! "$(ls -A web/admin-spa/dist 2>/dev/null)" ]; then
+        echo -e "${YELLOW}⚠️  前端资源未构建，正在构建...${NC}"
         cd web/admin-spa/
 
         if [ ! -d "node_modules" ]; then
@@ -155,21 +154,22 @@ if [ "$rust_mode" = "3" ]; then
             npm install
         fi
 
-        echo -e "${GREEN}✅ 前端将在浏览器自动打开: http://localhost:3001${NC}"
-        npm run dev
+        echo "🔨 构建前端资源..."
+        npm run build
+        cd ../..
+        echo -e "${GREEN}✅ 前端构建完成${NC}"
     else
-        echo ""
-        echo -e "${GREEN}✅ 开发环境准备完成！${NC}"
-        echo ""
-        echo "📝 手动启动前端命令:"
-        echo "  cd web/admin-spa/"
-        echo "  npm install  # 首次运行"
-        echo "  npm run dev"
-        echo ""
-        echo "🌐 访问地址:"
-        echo "  - 前端: http://localhost:3001"
-        echo "  - API: http://localhost:8080"
-        echo "  - 健康检查: curl http://localhost:8080/health"
-        echo ""
+        echo -e "${GREEN}✅ 前端资源已存在${NC}"
     fi
+
+    echo ""
+    echo -e "${GREEN}✅ 开发环境准备完成！${NC}"
+    echo ""
+    echo "🌐 访问地址:"
+    echo "  - 管理界面: http://localhost:8080 或 http://localhost:8080/admin-next"
+    echo "  - API: http://localhost:8080/api"
+    echo "  - 健康检查: curl http://localhost:8080/health"
+    echo ""
+    echo "💡 提示: 前端和后端现在统一运行在端口 8080"
+    echo ""
 fi
