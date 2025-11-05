@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 
 use crate::middleware::{authenticate_jwt, JwtAuthState};
 use crate::models::api_key::{ApiKeyCreateOptions, ApiKeyPermissions};
@@ -24,6 +24,7 @@ use crate::utils::error::AppError;
 pub struct AdminRouteState {
     pub admin_service: Arc<AdminService>,
     pub api_key_service: Arc<ApiKeyService>,
+    pub redis: crate::RedisPool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -40,7 +41,17 @@ pub struct OemSettings {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ClaudeAccountRequest {
     pub name: String,
+    #[serde(rename = "type")]
+    pub account_type: String,  // "claude-console", "claude-official"
+    #[serde(rename = "sessionToken")]
+    pub session_token: Option<String>,
+    #[serde(rename = "customApiEndpoint")]
+    pub custom_api_endpoint: Option<String>,
     pub description: Option<String>,
+    #[serde(rename = "isActive")]
+    pub is_active: Option<bool>,
+    #[serde(rename = "isSchedulable")]
+    pub is_schedulable: Option<bool>,
     #[serde(rename = "proxyUrl")]
     pub proxy_url: Option<String>,
     #[serde(rename = "proxyUsername")]
@@ -64,6 +75,10 @@ pub struct ApiKeyRequest {
     pub rate_limit_requests: Option<i32>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(rename = "account_id")]
+    pub account_id: Option<String>,
+    #[serde(rename = "is_active")]
+    pub is_active: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -87,6 +102,26 @@ pub struct ExchangeCodeRequest {
     pub proxy_username: Option<String>,
     #[serde(rename = "proxyPassword")]
     pub proxy_password: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CcrAccountRequest {
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(rename = "api_url")]
+    pub api_url: String,
+    #[serde(rename = "api_key")]
+    pub api_key: String,
+    #[serde(default = "default_priority")]
+    pub priority: u8,
+    #[serde(default, rename = "enable_rate_limit")]
+    pub enable_rate_limit: bool,
+    #[serde(default, rename = "rate_limit_minutes")]
+    pub rate_limit_minutes: Option<i32>,
+}
+
+fn default_priority() -> u8 {
+    50
 }
 
 // ============================================================================
@@ -119,11 +154,13 @@ pub struct ExchangeCodeRequest {
 pub fn create_admin_routes(
     admin_service: Arc<AdminService>,
     api_key_service: Arc<ApiKeyService>,
+    redis: crate::RedisPool,
 ) -> Router {
     // 创建共享状态
     let shared_state = Arc::new(AdminRouteState {
         admin_service: admin_service.clone(),
         api_key_service,
+        redis,
     });
 
     // 认证中间件工厂函数
@@ -180,6 +217,7 @@ pub fn create_admin_routes(
         .route("/azure-openai-accounts", get(list_azure_openai_accounts_handler))
         .route("/droid-accounts", get(list_droid_accounts_handler))
         .route("/ccr-accounts", get(list_ccr_accounts_handler))
+        .route("/ccr-accounts", post(create_ccr_account_handler))
         // API Keys管理
         .route("/api-keys", get(list_api_keys_handler))
         .route("/api-keys", post(create_api_key_handler))
@@ -361,39 +399,142 @@ async fn get_dashboard_handler() -> Result<impl IntoResponse, AppError> {
 // Claude Accounts Handlers
 // ============================================================================
 
-/// 获取Claude账户列表（Mock实现）
-async fn list_claude_accounts_handler() -> Result<impl IntoResponse, AppError> {
+/// 获取Claude账户列表（真实Redis实现）
+async fn list_claude_accounts_handler(
+    State(state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
     info!("📋 Listing Claude accounts");
 
-    // Mock数据 - 返回空列表
-    let response = json!({
-        "success": true,
-        "accounts": []
-    });
+    let mut conn = state.redis.get_connection().await?;
 
-    Ok((StatusCode::OK, Json(response)))
+    // 查询所有 Claude Console 账户
+    let pattern = "claude_console_account:*";
+    let keys: Vec<String> = redis::cmd("KEYS")
+        .arg(pattern)
+        .query_async(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to query Claude account keys: {}", e);
+            AppError::InternalError("Failed to fetch accounts".to_string())
+        })?;
+
+    let mut accounts = Vec::new();
+    for key in keys {
+        let account_json: String = redis::cmd("GET")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await?;
+
+        if let Ok(account_data) = serde_json::from_str::<serde_json::Value>(&account_json) {
+            accounts.push(account_data);
+        }
+    }
+
+    info!("✅ Found {} Claude accounts", accounts.len());
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": accounts
+    }))))
 }
 
-/// 创建Claude账户（Mock实现）
+/// 创建Claude账户（真实Redis实现）
 async fn create_claude_account_handler(
-    Json(account): Json<ClaudeAccountRequest>,
+    State(state): State<Arc<AdminRouteState>>,
+    Json(request): Json<ClaudeAccountRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    info!("➕ Creating Claude account: {}", account.name);
+    info!("➕ Creating Claude account: {}", request.name);
 
-    // Mock实现 - 返回成功响应
-    let response = json!({
+    // 验证必需字段
+    if request.name.trim().is_empty() {
+        return Err(AppError::BadRequest("Account name cannot be empty".to_string()));
+    }
+
+    if request.account_type != "claude-console" && request.account_type != "claude-official" {
+        return Err(AppError::BadRequest("Invalid account type".to_string()));
+    }
+
+    if request.session_token.is_none() {
+        return Err(AppError::BadRequest("Session token is required".to_string()));
+    }
+
+    // 生成账户 ID (UUID 类型，不是字符串!)
+    let account_uuid = uuid::Uuid::new_v4();
+    let account_id = format!("claude_acc_{}", account_uuid);
+
+    // TODO: 加密 session_token
+    // let encrypted_token = encrypt(&request.session_token.unwrap())?;
+
+    // 构建符合 ClaudeAccount 结构的完整账户数据
+    let account_data = json!({
+        "id": account_uuid,  // UUID 类型
+        "name": request.name,
+        "description": request.description,
+        "email": null,
+        "password": null,
+        "claudeAiOauth": null,
+        "accessToken": null,
+        "refreshToken": null,
+        "expiresAt": null,
+        "scopes": null,
+        "proxy": request.custom_api_endpoint.as_ref().map(|_| json!({
+            "endpoint": request.custom_api_endpoint
+        }).to_string()),
+        "isActive": request.is_active.unwrap_or(true),
+        "accountType": "shared",  // AccountType enum: shared/dedicated
+        "platform": "claudeconsole",  // Platform enum: claudeconsole for Claude Console accounts
+        "priority": 50,  // 默认优先级
+        "schedulable": request.is_schedulable.unwrap_or(true),
+        "subscriptionInfo": null,
+        "autoStopOnWarning": false,
+        "useUnifiedUserAgent": false,
+        "useUnifiedClientId": false,
+        "unifiedClientId": null,
+        "accountExpiresAt": null,
+        "extInfo": null,  // 扩展信息
+        "status": "active",  // AccountStatus enum: active/inactive/error/overloaded/expired
+        "errorMessage": null,
+        "lastRefreshAt": null,
+        "concurrencyLimit": 5,  // 并发限制
+        "currentConcurrency": 0,  // 当前并发数
+        "notes": null,
+        "session_token": request.session_token.unwrap(),  // Claude Console 专用
+        "custom_api_endpoint": request.custom_api_endpoint,  // Claude Console 专用
+        "createdAt": chrono::Utc::now(),
+        "updatedAt": chrono::Utc::now()
+    });
+
+    // 存储到 Redis
+    // 使用统一的 claude_account: 键模式（与 account_service 一致）
+    let redis_key = format!("claude_account:{}", account_id);
+    let mut conn = state.redis.get_connection().await?;
+
+    let account_json = serde_json::to_string(&account_data)?;
+
+    // 使用 pipeline 原子性操作：1) SET 账户数据 2) SADD 到账户列表
+    redis::pipe()
+        .cmd("SET").arg(&redis_key).arg(&account_json)
+        .cmd("SADD").arg("claude_accounts").arg(&account_id)
+        .query_async::<_, ()>(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to save Claude account to Redis: {}", e);
+            AppError::InternalError("Failed to create account".to_string())
+        })?;
+
+    info!("✅ Claude account created successfully: {}", account_id);
+
+    Ok((StatusCode::OK, Json(json!({
         "success": true,
         "message": "Claude账户创建成功",
         "account": {
-            "id": format!("claude_acc_{}", uuid::Uuid::new_v4()),
-            "name": account.name,
-            "description": account.description,
+            "id": account_id,
+            "name": request.name,
+            "description": request.description,
             "status": "active",
             "createdAt": chrono::Utc::now().to_rfc3339()
         }
-    });
-
-    Ok((StatusCode::OK, Json(response)))
+    }))))
 }
 
 /// 更新Claude账户（Mock实现）
@@ -568,11 +709,10 @@ async fn update_api_key_handler(
     info!("🔄 Updating API key: {} with name: {}", id, key_request.name);
 
     // 调用 ApiKeyService 的更新方法
-    // 目前只支持更新 name 和 is_active
-    // ApiKeyRequest 不包含 is_active 字段，所以传 None（保持原状态）
+    // 支持更新 name, is_active, account_id (映射到 claude_console_account_id)
     let updated_key = state
         .api_key_service
-        .update_key(&id, Some(key_request.name), None)
+        .update_key(&id, Some(key_request.name), key_request.is_active, key_request.account_id)
         .await?;
 
     let response = json!({
@@ -1069,12 +1209,131 @@ async fn list_droid_accounts_handler(
     Ok((StatusCode::OK, Json(serde_json::json!({ "success": true, "data": [] }))))
 }
 
-/// CCR 账户列表（占位）
+/// CCR 账户列表处理器
+///
+/// 从 Redis 获取所有 CCR 账户
 async fn list_ccr_accounts_handler(
-    State(_state): State<Arc<AdminRouteState>>,
+    State(state): State<Arc<AdminRouteState>>,
 ) -> Result<impl IntoResponse, AppError> {
-    info!("📋 Fetching CCR accounts (placeholder)");
-    Ok((StatusCode::OK, Json(serde_json::json!({ "success": true, "data": [] }))))
+    info!("📋 Fetching CCR accounts");
+
+    let mut conn = state.redis.get_connection().await?;
+
+    // 使用 SCAN 命令查找所有 ccr_account:* 键
+    let pattern = "ccr_account:*";
+    let mut accounts = Vec::new();
+
+    // 使用 KEYS 命令获取所有匹配的键（注意：生产环境应使用 SCAN）
+    let keys: Vec<String> = redis::cmd("KEYS")
+        .arg(pattern)
+        .query_async(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to query CCR account keys: {}", e);
+            AppError::InternalError("Failed to fetch accounts".to_string())
+        })?;
+
+    // 获取每个键对应的账户数据
+    for key in keys {
+        let account_json: String = redis::cmd("GET")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to get account data for key {}: {}", key, e);
+                AppError::InternalError("Failed to fetch account data".to_string())
+            })?;
+
+        match serde_json::from_str::<serde_json::Value>(&account_json) {
+            Ok(account_data) => accounts.push(account_data),
+            Err(e) => {
+                error!("Failed to parse account data for key {}: {}", key, e);
+                // 继续处理其他账户
+            }
+        }
+    }
+
+    info!("✅ Found {} CCR accounts", accounts.len());
+
+    let response = json!({
+        "success": true,
+        "data": accounts
+    });
+
+    Ok((StatusCode::OK, Json(response)))
+}
+
+/// 创建 CCR 账户处理器
+///
+/// 接收 CCR 账户信息并创建新的 CCR 账户
+/// 使用 Redis 存储账户数据
+async fn create_ccr_account_handler(
+    State(state): State<Arc<AdminRouteState>>,
+    Json(request): Json<CcrAccountRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("➕ Creating CCR account: {}", request.name);
+
+    // 验证必需字段
+    if request.name.trim().is_empty() {
+        return Err(AppError::BadRequest("Account name cannot be empty".to_string()));
+    }
+    if request.api_url.trim().is_empty() {
+        return Err(AppError::BadRequest("API URL cannot be empty".to_string()));
+    }
+    if request.api_key.trim().is_empty() {
+        return Err(AppError::BadRequest("API key cannot be empty".to_string()));
+    }
+
+    // 生成账户 ID
+    let account_id = uuid::Uuid::new_v4().to_string();
+
+    // 构建账户数据 - 使用 ClaudeAccount 结构但设置 platform 为 CCR
+    let account_data = json!({
+        "id": account_id,
+        "name": request.name,
+        "description": request.description,
+        "api_url": request.api_url,
+        "api_key": request.api_key,  // 注意: 实际生产中应该加密存储
+        "priority": request.priority,
+        "enable_rate_limit": request.enable_rate_limit,
+        "rate_limit_minutes": request.rate_limit_minutes,
+        "platform": "CCR",
+        "isActive": true,
+        "accountType": "shared",
+        "schedulable": true,
+        "createdAt": chrono::Utc::now().to_rfc3339(),
+        "updatedAt": chrono::Utc::now().to_rfc3339()
+    });
+
+    // 存储到 Redis
+    let redis_key = format!("ccr_account:{}", account_id);
+    let mut conn = state.redis.get_connection().await?;
+
+    let account_json = serde_json::to_string(&account_data).map_err(|e| {
+        error!("Failed to serialize account data: {}", e);
+        AppError::InternalError("Data serialization failed".to_string())
+    })?;
+
+    redis::cmd("SET")
+        .arg(&redis_key)
+        .arg(&account_json)
+        .query_async::<_, ()>(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to save CCR account to Redis: {}", e);
+            AppError::InternalError("Failed to create account".to_string())
+        })?;
+
+    info!("✅ CCR account created successfully: {}", account_id);
+
+    // 返回成功响应
+    let response = json!({
+        "success": true,
+        "message": "CCR账户创建成功",
+        "data": account_data
+    });
+
+    Ok((StatusCode::OK, Json(response)))
 }
 
 /// 检查更新处理器

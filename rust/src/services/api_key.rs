@@ -341,6 +341,7 @@ impl ApiKeyService {
         key_id: &str,
         name: Option<String>,
         is_active: Option<bool>,
+        account_id: Option<String>,
     ) -> Result<ApiKey> {
         // 获取现有 Key
         let mut api_key = self.get_key(key_id).await?;
@@ -359,6 +360,10 @@ impl ApiKeyService {
 
         if let Some(new_is_active) = is_active {
             api_key.is_active = new_is_active;
+        }
+
+        if let Some(new_account_id) = account_id {
+            api_key.claude_console_account_id = Some(new_account_id);
         }
 
         // 更新时间戳

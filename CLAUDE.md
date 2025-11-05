@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-Claude Relay Service 是一个高性能 AI API 中转服务，支持多个平台（Claude、Gemini、OpenAI、Bedrock、Azure）。
+Rust CRS(Rust Claude Relay Service) 是一个高性能 AI API 中转服务，支持多个平台（Claude、Gemini、OpenAI、Bedrock、Azure）。
 
 **当前状态**: 🚧 **后端重构项目** - 从 Node.js 迁移到 Rust（进行中）
 
@@ -486,10 +486,10 @@ async fn update_stats(pool: &Pool, key: &str, increment: i64) -> Result<()> {
 
 ### 修复 Bug 的标准流程
 
+定义：`issuesystem` 参考 `claudedocs/issue-system-guide.md`
+
 ```bash
-# 1. 从 issue-todo.md 选择问题
-vim claudedocs/issue-todo.md
-vim claudedocs/issue-doing.md
+# 1. 从 issuesystem 选择问题
 
 # 2. 编写失败的测试（TDD）
 # rust/tests/test_bug_xxx.rs
@@ -510,10 +510,7 @@ bash rust/run-integration-tests.sh
 # 6. 更新接口文档（如有接口变更）
 vim docs/guides/api-reference.md
 
-# 7. 更新 issue-todo.md issue-doing.md issue-done.md 标记问题状态
-vim claudedocs/issue-todo.md
-vim claudedocs/issue-doing.md
-vim claudedocs/issue-done.md
+# 7. 更新 issuesystem 标记问题状态
 
 # 8. UI 漫游测试验证
 make rust-dev
@@ -548,7 +545,7 @@ make rust-dev
 1. 打开浏览器开发者工具（F12）
 2. 查看 Network 标签，检查 API 请求
 3. 查看 Console 标签，检查 JavaScript 错误
-4. 记录到 `claudedocs/issue.md`，标明是接口问题还是数据格式问题
+4. 记录到 `issuesystem`，标明是接口问题还是数据格式问题
 
 ## 关键约束
 
@@ -571,7 +568,7 @@ make rust-dev
 - **Rust**: 提交前必须通过 `cargo clippy` 和 `cargo fmt --check`
 - **测试覆盖**: 每个 bug 修复必须有对应的集成测试
 - **文档同步**: 更改接口时必须更新 `docs/guides/api-reference.md`
-- **问题追踪**: 所有发现的问题必须记录到 `claudedocs/issue.md`
+- **问题追踪**: 所有发现的问题必须记录到 `issuesystem`
 
 ## 常见工作流程
 
@@ -657,7 +654,7 @@ redis.setex(&format!("sticky_session:{}", session_hash), TTL, selected_account_i
 ### UI 漫游测试发现问题
 
 **标准处理流程**:
-1. **记录**: 立即记录到 `claudedocs/issue-todo.md`
+1. **记录**: 立即记录到 `issuesystem`
 2. **分类**: 标记优先级和影响范围
 3. **批次**: 放入合适的修复批次
 4. **跟踪**: 修复后更新状态
@@ -679,7 +676,7 @@ redis.setex(&format!("sticky_session:{}", session_hash), TTL, selected_account_i
 - **路线图**: `docs/development/roadmap.md`
 
 **工作文档**:
-- **问题追踪**
+- **问题追踪** `issuesystem`
   - **问题追踪**: `claudedocs/issue-todo.md`（核心工作文件）
   - **问题追踪**: `claudedocs/issue-doing.md`（核心工作文件）
   - **问题追踪**: `claudedocs/issue-done.md`（核心工作文件）

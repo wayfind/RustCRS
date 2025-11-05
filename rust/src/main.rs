@@ -5,7 +5,7 @@ use axum::{
     Router,
 };
 use std::{path::PathBuf, sync::Arc};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info};
 
 use claude_relay::routes::{
@@ -216,8 +216,10 @@ async fn main() -> Result<()> {
             .unwrap_or_else(|| PathBuf::from("../web/admin-spa/dist"))
     };
 
+    // SPA fallback: serve index.html for all unmatched routes
+    let index_path = static_dir.join("index.html");
     let serve_dir = ServeDir::new(&static_dir)
-        .not_found_service(ServeDir::new(&static_dir).append_index_html_on_directories(true));
+        .not_found_service(ServeFile::new(&index_path));
 
     info!("📁 Static files serving from: {}", static_dir.display());
 
@@ -237,11 +239,11 @@ async fn main() -> Result<()> {
         .with_state(health_state)
         .nest(
             "/admin",
-            create_admin_routes(admin_service.clone(), api_key_service.clone()),
+            create_admin_routes(admin_service.clone(), api_key_service.clone(), redis.clone()),
         )
         .nest(
             "/web",
-            create_admin_routes(admin_service, api_key_service),
+            create_admin_routes(admin_service, api_key_service, redis.clone()),
         ) // For frontend compatibility
         .nest("/api", create_api_router(api_state.clone()))
         .nest("/claude", create_api_router(api_state))

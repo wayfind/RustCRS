@@ -1,14 +1,17 @@
 // Claude API 路由
 //
 // 实现 Claude API 的所有端点，包括：
-// - POST /api/v1/messages - Claude 消息处理 (流式+非流式)
-// - POST /claude/v1/messages - 别名路由
-// - POST /api/v1/messages/count_tokens - Token 计数
-// - GET /api/v1/models - 模型列表
-// - GET /api/v1/key-info - API Key 信息
-// - GET /api/v1/usage - 使用统计
+// - POST /v1/messages - Claude 消息处理 (流式+非流式)
+// - POST /v1/messages/count_tokens - Token 计数
+// - GET /v1/models - 模型列表
+// - GET /v1/key-info - API Key 信息
+// - GET /v1/usage - 使用统计
 // - GET /v1/me - 用户信息 (Claude Code 客户端)
 // - GET /v1/organizations/:org_id/usage - 组织使用统计
+//
+// 注意：这些路由会被 nest 到 /api 和 /claude 前缀下，形成最终路径：
+// - /api/v1/messages (主要端点)
+// - /claude/v1/messages (别名)
 
 use axum::{
     body::Body,
@@ -63,16 +66,15 @@ pub fn create_router(state: ApiState) -> Router {
 
     Router::new()
         // Claude Messages API - 主要端点
-        .route("/api/v1/messages", post(handle_messages))
-        .route("/claude/v1/messages", post(handle_messages)) // 别名
+        .route("/v1/messages", post(handle_messages))
         // Token 计数 API
-        .route("/api/v1/messages/count_tokens", post(handle_count_tokens))
+        .route("/v1/messages/count_tokens", post(handle_count_tokens))
         // 模型列表
-        .route("/api/v1/models", get(handle_list_models))
+        .route("/v1/models", get(handle_list_models))
         // API Key 信息
-        .route("/api/v1/key-info", get(handle_key_info))
+        .route("/v1/key-info", get(handle_key_info))
         // 使用统计
-        .route("/api/v1/usage", get(handle_usage))
+        .route("/v1/usage", get(handle_usage))
         // 用户信息 (Claude Code 客户端)
         .route("/v1/me", get(handle_me))
         // 组织使用统计
@@ -181,10 +183,10 @@ async fn handle_messages(
             SchedulerAccountVariant::ClaudeOfficial
             | SchedulerAccountVariant::ClaudeConsole
             | SchedulerAccountVariant::Ccr => {
-                // 调用流式方法
+                // 调用流式方法，传入已选择的账户 ID 避免二次选择
                 let stream_rx = state
                     .relay_service
-                    .relay_request_stream(request, session_hash)
+                    .relay_request_stream(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
                     .await?;
 
                 // 将 mpsc::Receiver 转换为 Stream
@@ -297,15 +299,15 @@ async fn handle_messages(
             info!("🔄 Using ClaudeRelayService for claude-official account");
             state
                 .relay_service
-                .relay_request(request, session_hash)
+                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
                 .await?
         }
         SchedulerAccountVariant::ClaudeConsole => {
             info!("🔄 Using ClaudeRelayService for claude-console account");
-            // Console 账户复用 Claude Official 转发服务
+            // Console 账户复用 Claude Official 转发服务，传入已选择的账户 ID
             state
                 .relay_service
-                .relay_request(request, session_hash)
+                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
                 .await?
         }
         SchedulerAccountVariant::Bedrock => {
@@ -337,10 +339,10 @@ async fn handle_messages(
         }
         SchedulerAccountVariant::Ccr => {
             info!("🔄 Using ClaudeRelayService for ccr account");
-            // CCR 账户复用 Claude Official 转发服务
+            // CCR 账户复用 Claude Official 转发服务，传入已选择的账户 ID
             state
                 .relay_service
-                .relay_request(request, session_hash)
+                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
                 .await?
         }
     };

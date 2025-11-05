@@ -59,6 +59,41 @@ issue-todo.md (待修复)
 
 ## ✅ 已完成批次
 
+### 批次 12: Claude 账户响应格式修复
+
+**完成时间**: 2025-11-04
+**涉及问题**: ISSUE-UI-013
+**修复时长**: ~30 分钟
+**测试结果**: ✅ 单元测试通过, 集成测试 2/2 通过, API 测试通过
+**文档更新**: ✅ 已完成
+
+**批次总结**:
+- 修复了 Claude 账户列表接口响应格式不一致问题
+- 将 `"accounts"` 字段统一改为 `"data"` 字段
+- 新增集成测试 `rust/tests/test_claude_accounts_response_format.rs` (2 个测试)
+- 修复后前端 API Keys 编辑页面可以正确加载 Claude 专属账号下拉列表
+
+**修复详情**:
+1. **ISSUE-UI-013**: 修改 `list_claude_accounts_handler` 返回格式 (admin.rs:395)
+   - 将 `"accounts": []` 改为 `"data": []`
+   - 影响 2 个端点: `/admin/claude-accounts` 和 `/admin/claude-console-accounts`
+   - 与其他 7 个账户类型端点保持一致
+
+**根因分析**:
+- 响应字段名不一致 (前端期望 `data` 字段，但 Claude 端点返回 `accounts` 字段)
+- Node.js→Rust 迁移时未统一 API 响应格式
+- 只有 Claude 相关的 2 个端点受影响，其他端点已正确
+
+**测试覆盖**:
+- 集成测试: 验证端点返回格式 (rust/tests/test_claude_accounts_response_format.rs)
+- API 测试: 验证实际 HTTP 响应 (/tmp/test_claude_accounts_fix.sh)
+
+**修改文件**:
+- `rust/src/routes/admin.rs` - 修复 handler 返回格式
+- `rust/tests/test_claude_accounts_response_format.rs` - 新增集成测试
+
+---
+
 ### 批次 11: Tags 端点别名和日期格式修复
 
 **完成时间**: 2025-11-03
@@ -1049,6 +1084,332 @@ Node.js→Rust 迁移时，`GET /admin/claude-code-version` 端点未实现。�
 - 持续更新统计信息和根因分析总结
 - 定期回顾归档问题，提取共性经验
 - 本文件作为知识库，供未来参考
+
+---
+
+## 📦 批次 14: 账户类型显示和分类修复 (2025-11-04)
+
+**批次主题**: CCR 账户在前端显示和分类
+**问题数量**: 1 个 P1 问题
+**完成时间**: 2025-11-04
+**统一根因**: 前端组件缺失 CCR 账户类型的加载和渲染逻辑
+
+### 批次特点
+- **前端特例修复**: 例外修改前端 Vue 组件（通常前端稳定无需改动）
+- **两层修复**: 数据加载层（EditApiKeyModal.vue）+ 渲染显示层（AccountSelector.vue）
+- **架构理解**: 确认 CCR 作为 Claude 账户类型的设计定位
+- **完整测试**: Playwright UI 测试验证修复效果
+
+---
+
+### ISSUE-UI-014 - CCR 账户在 API Keys 编辑中不显示 ✅
+
+**优先级**: P1
+**模块**: 管理后台/API Keys/账户选择器
+**状态**: ✅ 已修复
+**修复时间**: 2025-11-04
+**来源**: issue-todo.md → issue-doing.md → 本文件
+
+**问题描述**:
+- 用户编辑 API Key 时，在"Claude 专属账号"下拉列表中无法看到 CCR 账户
+- Redis 中存在 1 个 CCR 测试账户："CCR测试账户" (ID: 931d4164-03e6-44e6-a4bd-8cd82d0ca90b)
+- 后端端点 GET /admin/ccr-accounts 工作正常，返回正确数据
+- 问题出在前端组件层
+
+**重现步骤**:
+1. 登录管理后台 http://localhost:8080/admin-next
+2. 访问 API Keys 页面
+3. 点击任意 API Key 的"编辑"按钮
+4. 点击"Claude 专属账号"下拉列表
+5. 观察：只显示"使用共享账号池"，没有 CCR 账户
+
+**预期行为**:
+- CCR 账户应显示在"Claude 专属账号"下拉列表中
+- 应有独立的 section header："CCR (Claude Code Route) 专属账号"
+- 应显示账户名称、状态、创建时间
+
+**实际行为**:
+- 下拉列表中只有"使用共享账号池"选项
+- CCR 账户完全不可见
+
+**根因分析**:
+- **根本原因**: 前端组件缺失 CCR 账户支持
+  - 为什么 1: CCR 账户在下拉列表中不可见
+    → 因为 AccountSelector.vue 组件没有渲染 CCR 账户的模板和逻辑
+  - 为什么 2: AccountSelector 组件没有 CCR 数据
+    → 因为 EditApiKeyModal.vue 未加载 CCR 账户数据
+  - 为什么 3: EditApiKeyModal 未加载 CCR 数据
+    → 因为 Promise.all 中缺少 ccr-accounts 端点调用
+  - 为什么 4: 为什么组件开发时遗漏 CCR？
+    → 因为 CCR 是后期添加的账户类型
+  - 为什么 5: **前端组件在 CCR 端点实现后未同步更新**
+- **根因类型**: 📚 缺失功能（前端未同步后端新增账户类型）
+- **依赖问题**: 无
+- **阻塞问题**: 🚫 用户无法在 API Keys 中绑定 CCR 账户
+- **影响范围**: CCR 账户无法通过 UI 管理和使用
+
+**架构说明**:
+- CCR (Claude Code Route) 是 Claude 账户类型的一种实现方式
+- 使用独立的 Redis key 前缀: `ccr_account:*`
+- 使用独立的后端端点: `/admin/ccr-accounts`
+- 认证方式: API URL + API Key（区别于 Claude OAuth）
+- 平台标识: `platform: 'ccr'` 或 `'CCR'`
+
+**修复方案**:
+
+**第一步修复**: EditApiKeyModal.vue - 添加 CCR 账户加载
+
+修改文件: `web/admin-spa/src/components/apikeys/EditApiKeyModal.vue`
+修改位置: Lines 1011-1067
+
+```javascript
+// Before: 缺少 CCR 账户加载
+const [
+  claudeData,
+  claudeConsoleData,
+  geminiData,
+  // ... 其他账户类型
+] = await Promise.all([
+  apiClient.get('/admin/claude-accounts'),
+  apiClient.get('/admin/claude-console-accounts'),
+  // ... 其他端点
+])
+
+// After: 添加 CCR 账户加载
+const [
+  claudeData,
+  claudeConsoleData,
+  ccrData,  // ✅ 新增
+  geminiData,
+  // ...
+] = await Promise.all([
+  apiClient.get('/admin/claude-accounts'),
+  apiClient.get('/admin/claude-console-accounts'),
+  apiClient.get('/admin/ccr-accounts'),  // ✅ 新增
+  // ...
+])
+
+// 合并 CCR 账户到 claudeAccounts 数组
+if (ccrData.success) {
+  ccrData.data?.forEach((account) => {
+    claudeAccounts.push({
+      ...account,
+      platform: 'ccr',
+      isDedicated: account.accountType === 'dedicated'
+    })
+  })
+}
+```
+
+**第二步修复**: AccountSelector.vue - 添加 CCR 账户渲染
+
+修改文件: `web/admin-spa/src/components/common/AccountSelector.vue`
+
+1. **新增模板 section** (Lines 203-240):
+```vue
+<!-- CCR 账号（仅 Claude） -->
+<div v-if="platform === 'claude' && filteredCCRAccounts.length > 0">
+  <div class="bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+    CCR (Claude Code Route) 专属账号
+  </div>
+  <div
+    v-for="account in filteredCCRAccounts"
+    :key="account.id"
+    class="cursor-pointer px-4 py-2 transition-colors hover:bg-gray-50 dark:hover:bg-gray-700"
+    :class="{'bg-blue-50 dark:bg-blue-900/20': modelValue === `ccr:${account.id}`}"
+    @click="selectAccount(`ccr:${account.id}`)"
+  >
+    <div class="flex items-center justify-between">
+      <div>
+        <span class="text-gray-700 dark:text-gray-300">{{ account.name }}</span>
+        <span class="ml-2 rounded-full px-2 py-0.5 text-xs" :class="statusClasses">
+          {{ getAccountStatusText(account) }}
+        </span>
+      </div>
+      <span class="text-xs text-gray-400 dark:text-gray-500">
+        {{ formatDate(account.createdAt) }}
+      </span>
+    </div>
+  </div>
+</div>
+```
+
+2. **新增 computed property** (Lines 492-504):
+```javascript
+// 过滤的 CCR 账号
+const filteredCCRAccounts = computed(() => {
+  if (props.platform !== 'claude') return []
+
+  let accounts = sortedAccounts.value.filter((a) => a.platform === 'ccr' || a.platform === 'CCR')
+
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase()
+    accounts = accounts.filter((account) => account.name.toLowerCase().includes(query))
+  }
+
+  return accounts
+})
+```
+
+3. **更新 hasResults** (Line 526):
+```javascript
+const hasResults = computed(() => {
+  return (
+    filteredGroups.value.length > 0 ||
+    filteredOAuthAccounts.value.length > 0 ||
+    filteredConsoleAccounts.value.length > 0 ||
+    filteredCCRAccounts.value.length > 0 ||  // ✅ 新增
+    filteredOpenAIResponsesAccounts.value.length > 0
+  )
+})
+```
+
+4. **更新 selectedLabel** (Lines 374-381):
+```javascript
+// CCR 账号
+if (props.modelValue.startsWith('ccr:')) {
+  const accountId = props.modelValue.substring(4)
+  const account = props.accounts.find(
+    (a) => a.id === accountId && (a.platform === 'ccr' || a.platform === 'CCR')
+  )
+  return account ? `${account.name} (${getAccountStatusText(account)})` : ''
+}
+```
+
+**构建和部署**:
+```bash
+cd web/admin-spa
+npm run build
+# 输出到 dist/，由 Rust 后端提供静态文件服务
+
+cd /mnt/d/prj/claude-relay-service
+lsof -ti:8080 | xargs kill -9
+cargo run &  # 重启后端
+```
+
+**验证结果**:
+
+使用 Playwright 进行 UI 测试:
+
+1. ✅ 导航到 API Keys 页面成功
+2. ✅ 点击 Edit 按钮打开对话框
+3. ✅ 点击 Claude 专属账号下拉列表
+4. ✅ 显示 CCR section header: "CCR (Claude Code Route) 专属账号"
+5. ✅ 显示 CCR 账户: "CCR测试账户"
+6. ✅ 显示状态徽章: "正常"
+7. ✅ 显示创建时间: "今天创建"
+
+**截图**: `.playwright-mcp/ccr-account-showing-in-dropdown.png`
+
+**测试方法**:
+```typescript
+// Playwright test script
+await page.goto('http://localhost:8080/admin-next')
+await page.fill('input[type="text"]', 'admin')
+await page.fill('input[type="password"]', 'admin123456')
+await page.click('button:has-text("登录")')
+await page.click('text=API Keys')
+await page.click('button:has-text("编辑")').first()
+await page.click('text=Claude 专属账号')
+await page.screenshot({ path: 'ccr-account-showing-in-dropdown.png' })
+```
+
+**技术细节**:
+
+1. **数据流程**:
+   - EditApiKeyModal 从 8 个账户端点加载数据（新增 ccr-accounts）
+   - 合并 Claude OAuth + Console + CCR 账户到 `localAccounts.claude` 数组
+   - 传递给 AccountSelector 组件的 `accounts` prop
+
+2. **组件层次**:
+   ```
+   EditApiKeyModal.vue
+     ├─ 加载数据: Promise.all([...])
+     ├─ 合并账户: claudeAccounts.push({...})
+     └─ 传递数据 → AccountSelector.vue
+                      ├─ 过滤数据: filteredCCRAccounts
+                      ├─ 渲染模板: CCR section
+                      └─ 处理选择: selectAccount('ccr:id')
+   ```
+
+3. **平台标识处理**:
+   - 后端返回: `platform: 'CCR'` (大写)
+   - 前端过滤: `platform === 'ccr' || platform === 'CCR'` (兼容两种)
+   - 选择 ID 前缀: `ccr:${account.id}`
+
+**修改文件**:
+- `web/admin-spa/src/components/apikeys/EditApiKeyModal.vue` (Lines 1011-1067)
+- `web/admin-spa/src/components/common/AccountSelector.vue` (Lines 203-240, 374-381, 492-504, 526)
+
+**相关端点**:
+- ✅ GET /admin/ccr-accounts (已实现，返回正常)
+- ✅ GET /admin/claude-accounts (OAuth 账户)
+- ✅ GET /admin/claude-console-accounts (Console 账户)
+
+**经验总结**:
+
+1. **前端特例修复合理性**:
+   - 一般原则：前端稳定，不修改前端代码
+   - 本次例外：CCR 是后端新增账户类型，前端必须同步支持
+   - 判断标准：是否是必要的功能完善（✅），而非前端 bug 修复（❌）
+
+2. **两层修复的重要性**:
+   - 仅修复数据加载（第一步）不够 → 数据存在但不显示
+   - 仅修复渲染逻辑（第二步）不够 → 无数据可渲染
+   - 必须两层都修复：加载 + 渲染
+
+3. **组件化架构理解**:
+   - 父组件负责数据加载和聚合
+   - 子组件负责数据过滤和渲染
+   - Props 传递连接两层
+   - 需要同时修改父子组件
+
+4. **账户类型一致性**:
+   - CCR 作为 Claude 账户类型的设计合理
+   - 使用独立端点但归类到 Claude 下拉列表
+   - 前端需要正确理解这种设计意图
+
+5. **测试验证完整性**:
+   - 后端测试（curl）验证端点工作
+   - 前端测试（Playwright）验证 UI 显示
+   - 两者结合才能确认端到端功能正常
+
+**后续工作**:
+- [ ] 检查其他前端页面是否也需要 CCR 支持
+- [ ] 确认其他账户类型（Gemini, OpenAI 等）是否有类似问题
+- [ ] 考虑添加前端集成测试覆盖账户选择器组件
+
+**备注**:
+- 这是罕见的前端修复案例（标记为"特例"）
+- 修复原因：后端功能扩展，前端必须同步
+- 修复验证：通过 Playwright UI 测试确认
+- 架构理解：CCR 是 Claude 账户类型的一种实现方式
+
+---
+
+### 批次 14 总结
+
+**代码变更统计**:
+- Vue 组件修改: 2 个文件
+- 新增代码行数: ~60 行
+- 修改代码行数: ~10 行
+
+**问题解决**:
+- ✅ CCR 账户现在可以在前端正确显示
+- ✅ 用户可以在 API Keys 编辑中选择 CCR 账户
+- ✅ 账户信息（名称、状态、时间）正确显示
+
+**关键成果**:
+1. ✅ 完成前端与后端 CCR 功能同步
+2. ✅ 理解并确认 CCR 作为 Claude 账户类型的设计
+3. ✅ 掌握 Vue 组件两层修复模式（数据 + 渲染）
+4. ✅ 使用 Playwright 验证端到端功能
+
+**经验教训**:
+- **前端稳定原则有例外**: 后端新增功能需要前端同步
+- **两层修复缺一不可**: 数据加载 + UI 渲染都需要修改
+- **组件通信理解关键**: Props 传递连接父子组件
+- **端到端测试重要**: 后端+前端联合验证才完整
 
 ---
 

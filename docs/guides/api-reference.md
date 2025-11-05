@@ -1509,6 +1509,66 @@ Update an API Key.
 
 ---
 
+### GET /admin/api-keys/:id
+
+Get detailed information for a single API Key.
+
+**Authentication:** Admin Token
+
+**Description:** Retrieves complete configuration and details for a specific API Key by ID. Used by frontend edit dialog to load current values (Batch 10 - ISSUE-UI-009).
+
+**Path Parameters:**
+- `id` (String) - The unique identifier of the API Key
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "id": "key_123",
+    "name": "Customer Key",
+    "description": "API key for customer X",
+    "owner_type": "user",
+    "owner_id": "user_456",
+    "is_active": true,
+    "is_deleted": false,
+    "token_limit": 10000000,
+    "concurrency_limit": 10,
+    "rate_limit_window": 60,
+    "rate_limit_requests": 1000,
+    "rate_limit_cost": 10.0,
+    "daily_cost_limit": 100.0,
+    "total_cost_limit": 1000.0,
+    "weekly_opus_cost_limit": 500.0,
+    "expires_at": "2025-12-31T23:59:59Z",
+    "expiration_mode": "fixed",
+    "activation_days": 0,
+    "permissions": "all",
+    "enable_model_restriction": false,
+    "restricted_models": [],
+    "enable_client_restriction": false,
+    "allowed_clients": [],
+    "claude_account_id": null,
+    "gemini_account_id": null,
+    "openai_account_id": null,
+    "tags": ["production", "team-a"],
+    "created_at": 1699012345,
+    "updated_at": 1730563200
+  }
+}
+```
+
+**Error Responses:**
+- **401 Unauthorized:** Admin token missing or invalid
+- **404 Not Found:** API Key with specified ID does not exist
+
+**Notes:**
+- Response uses `data` field for consistency with other endpoints (Batch 10 - ISSUE-UI-007)
+- All configuration fields are returned for frontend editing
+- Soft-deleted keys (is_deleted=true) will return 404
+
+---
+
 ### DELETE /admin/api-keys/:id
 
 Delete an API Key (soft delete).

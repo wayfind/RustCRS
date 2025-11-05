@@ -31,13 +31,47 @@ issue-todo.md (待修复)
 
 ## 🎯 当前工作批次
 
-### 批次 14 (待规划): 待定
+### 批次 15 (已完成): SPA 路由支持修复
 
-**状态**: ⏳ 暂无进行中的批次
+**包含问题**: 1 个 (P0 × 1)
+- ✅ ISSUE-UI-015: SPA 子路径返回 404 错误 (P0 - Critical)
 
-**说明**:
-- 批次 13 已完成
-- 等待下一批问题安排
+**开始时间**: 2025-11-05
+**完成时间**: 2025-11-05
+**状态**: ✅ 已完成
+
+**修复内容**:
+1. ✅ 修改 `main.rs:8` - 添加 `ServeFile` 导入
+2. ✅ 修改 `main.rs:219-222` - 实现 SPA fallback 机制
+3. ✅ 验证所有子路径正常工作（dashboard, accounts, api-keys）
+4. ✅ UI 回归测试通过
+
+**技术实现**:
+```rust
+// rust/src/main.rs:8
+use tower_http::services::{ServeDir, ServeFile};
+
+// rust/src/main.rs:219-222
+// SPA fallback: serve index.html for all unmatched routes
+let index_path = static_dir.join("index.html");
+let serve_dir = ServeDir::new(&static_dir)
+    .not_found_service(ServeFile::new(&index_path));
+```
+
+**验证结果**:
+- ✅ `/admin-next/dashboard` - Dashboard 页面完全正常
+- ✅ `/admin-next/accounts` - 账户管理页面完全正常
+- ✅ `/admin-next/api-keys` - API Keys 管理页面完全正常
+- ✅ 页面刷新功能正常
+- ✅ 直接访问子路径正常
+- ✅ 静态资源（JS、CSS）加载正常
+
+**集成测试**:
+- ✅ 创建 7 个测试用例覆盖所有 SPA 路由场景
+- ✅ 所有测试通过（7 passed / 0 failed）
+- ✅ 测试文件: `rust/tests/test_spa_routing.rs`
+
+**详细报告**: `claudedocs/batch-15-spa-routing-fix.md`
 
 ---
 

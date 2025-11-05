@@ -1,4 +1,4 @@
-# Claude Relay Service (Rust 版本)
+# Rust CRS(Rust Claude Relay Service)
 
 > **高性能 AI API 中转服务** - 支持 Claude、Gemini、OpenAI 等多平台，提供完整的多账户管理、认证和监控功能。
 
