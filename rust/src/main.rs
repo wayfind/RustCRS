@@ -1,7 +1,7 @@
 use anyhow::Result;
 use axum::{
     response::Redirect,
-    routing::get,
+    routing::{get, get_service},
     Router,
 };
 use std::{path::PathBuf, sync::Arc};
@@ -231,9 +231,14 @@ async fn main() -> Result<()> {
         info!("✅ Static directory verified: {}", static_dir.display());
     }
 
+    // Prepare favicon file service
+    let favicon_path = static_dir.join("favicon.ico");
+    let serve_favicon = ServeFile::new(&favicon_path);
+
     // Build router
     let app = Router::new()
         .route("/", get(|| async { Redirect::permanent("/admin-next") })) // Redirect root to admin
+        .route("/favicon.ico", get_service(serve_favicon))
         .route("/health", get(health_check))
         .route("/ping", get(ping))
         .with_state(health_state)

@@ -100,6 +100,8 @@ impl ClaudeAccountService {
             claude_ai_oauth: None,
             access_token: None,
             refresh_token: None,
+            session_token: None,
+            custom_api_endpoint: None,
             expires_at: None,
             scopes: None,
             proxy: options

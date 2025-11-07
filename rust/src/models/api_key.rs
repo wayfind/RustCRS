@@ -186,12 +186,19 @@ pub struct ApiKey {
     pub activation_unit: ActivationUnit,
 
     /// 绑定的账户 ID
+    #[serde(rename = "claudeAccountId")]
     pub claude_account_id: Option<String>,
+    #[serde(rename = "claudeConsoleAccountId")]
     pub claude_console_account_id: Option<String>,
+    #[serde(rename = "geminiAccountId")]
     pub gemini_account_id: Option<String>,
+    #[serde(rename = "openaiAccountId")]
     pub openai_account_id: Option<String>,
+    #[serde(rename = "azureOpenaiAccountId")]
     pub azure_openai_account_id: Option<String>,
+    #[serde(rename = "bedrockAccountId")]
     pub bedrock_account_id: Option<String>,
+    #[serde(rename = "droidAccountId")]
     pub droid_account_id: Option<String>,
 
     /// 用户 ID (如果启用用户管理)

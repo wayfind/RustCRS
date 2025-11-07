@@ -186,7 +186,7 @@ async fn handle_messages(
                 // 调用流式方法，传入已选择的账户 ID 避免二次选择
                 let stream_rx = state
                     .relay_service
-                    .relay_request_stream(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
+                    .relay_request_stream(request, session_hash, Some(selected.account.id.to_string()))
                     .await?;
 
                 // 将 mpsc::Receiver 转换为 Stream
@@ -299,7 +299,7 @@ async fn handle_messages(
             info!("🔄 Using ClaudeRelayService for claude-official account");
             state
                 .relay_service
-                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
+                .relay_request(request, session_hash, Some(selected.account.id.to_string()))
                 .await?
         }
         SchedulerAccountVariant::ClaudeConsole => {
@@ -307,7 +307,7 @@ async fn handle_messages(
             // Console 账户复用 Claude Official 转发服务，传入已选择的账户 ID
             state
                 .relay_service
-                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
+                .relay_request(request, session_hash, Some(selected.account.id.to_string()))
                 .await?
         }
         SchedulerAccountVariant::Bedrock => {
@@ -342,7 +342,7 @@ async fn handle_messages(
             // CCR 账户复用 Claude Official 转发服务，传入已选择的账户 ID
             state
                 .relay_service
-                .relay_request(request, session_hash, Some(format!("claude_acc_{}", selected.account.id)))
+                .relay_request(request, session_hash, Some(selected.account.id.to_string()))
                 .await?
         }
     };

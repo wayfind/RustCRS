@@ -271,15 +271,27 @@ impl ClaudeRelayService {
         access_token: &str,
         account: &ClaudeAccount,
     ) -> Result<RelayResponse> {
-        let url = format!("{}/v1/messages", self.config.api_url);
+        // Claude Console 使用 custom_api_endpoint，否则使用默认 API URL
+        let base_url = account
+            .custom_api_endpoint
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(&self.config.api_url);
+        let url = format!("{}/v1/messages", base_url);
 
-        let request_builder = self
+        let mut request_builder = self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("anthropic-version", &self.config.api_version)
-            .header("x-api-key", access_token)
-            .json(request_body);
+            .header("x-api-key", access_token);
+
+        // Claude Console 需要特定的 User-Agent
+        if account.platform == Platform::ClaudeConsole {
+            request_builder = request_builder.header("User-Agent", "claude_code");
+        }
+
+        let request_builder = request_builder.json(request_body);
 
         // 代理配置已在HTTP Client构建时设置，这里只需记录
         if account.proxy.is_some() {
@@ -405,13 +417,21 @@ impl ClaudeRelayService {
     }
 
     /// 获取访问token（已解密）
+    ///
+    /// 优先使用 session_token (Claude Console)，其次使用 access_token (官方 OAuth)
     fn get_access_token(&self, account: &ClaudeAccount) -> Result<String> {
-        // access_token 字段已在 account_service 中解密
+        // Claude Console 使用 session_token
+        if let Some(ref session_token) = account.session_token {
+            return Ok(session_token.clone());
+        }
+
+        // 官方 OAuth 使用 access_token
         if let Some(ref access_token) = account.access_token {
             return Ok(access_token.clone());
         }
+
         Err(AppError::Unauthorized(
-            "No access token available".to_string(),
+            "No access token or session token available".to_string(),
         ))
     }
 
@@ -598,24 +618,35 @@ impl ClaudeRelayService {
         config: ClaudeRelayConfig,
         request_body: ClaudeRequest,
         access_token: String,
-        _account: ClaudeAccount,
+        account: ClaudeAccount,
         tx: mpsc::Sender<Result<StreamChunk>>,
     ) -> Result<()> {
-        let url = format!("{}/v1/messages", config.api_url);
+        // Claude Console 使用 custom_api_endpoint，否则使用默认 API URL
+        let base_url = account
+            .custom_api_endpoint
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(&config.api_url);
+        let url = format!("{}/v1/messages", base_url);
 
         // 确保请求体包含 stream: true
         let mut stream_body = request_body.clone();
         stream_body.stream = Some(true);
 
+        let mut request_builder = http_client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("anthropic-version", &config.api_version)
+            .header("x-api-key", access_token);
+
+        // Claude Console 需要特定的 User-Agent
+        if account.platform == Platform::ClaudeConsole {
+            request_builder = request_builder.header("User-Agent", "claude_code");
+        }
+
         let response = timeout(
             Duration::from_secs(config.timeout_seconds),
-            http_client
-                .post(&url)
-                .header("Content-Type", "application/json")
-                .header("anthropic-version", &config.api_version)
-                .header("x-api-key", access_token)
-                .json(&stream_body)
-                .send(),
+            request_builder.json(&stream_body).send(),
         )
         .await
         .context("Request timeout")?

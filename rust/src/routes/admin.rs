@@ -41,12 +41,17 @@ pub struct OemSettings {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ClaudeAccountRequest {
     pub name: String,
-    #[serde(rename = "type")]
-    pub account_type: String,  // "claude-console", "claude-official"
+    #[serde(rename = "type", default)]
+    pub account_type: String,  // "claude-console", "claude-official" - optional, inferred from endpoint
     #[serde(rename = "sessionToken")]
     pub session_token: Option<String>,
     #[serde(rename = "customApiEndpoint")]
     pub custom_api_endpoint: Option<String>,
+    // Claude Console API Key fields
+    #[serde(rename = "apiUrl")]
+    pub api_url: Option<String>,
+    #[serde(rename = "apiKey")]
+    pub api_key: Option<String>,
     pub description: Option<String>,
     #[serde(rename = "isActive")]
     pub is_active: Option<bool>,
@@ -73,12 +78,44 @@ pub struct ApiKeyRequest {
     pub rate_limit_window: Option<i32>,
     #[serde(rename = "rateLimitRequests")]
     pub rate_limit_requests: Option<i32>,
+    #[serde(rename = "rateLimitCost")]
+    pub rate_limit_cost: Option<f64>,
+    #[serde(rename = "concurrencyLimit")]
+    pub concurrency_limit: Option<i32>,
+    #[serde(rename = "dailyCostLimit")]
+    pub daily_cost_limit: Option<f64>,
+    #[serde(rename = "totalCostLimit")]
+    pub total_cost_limit: Option<f64>,
+    #[serde(rename = "weeklyOpusCostLimit")]
+    pub weekly_opus_cost_limit: Option<f64>,
     #[serde(default)]
     pub tags: Vec<String>,
     #[serde(rename = "account_id")]
     pub account_id: Option<String>,
-    #[serde(rename = "is_active")]
+    #[serde(rename = "claudeAccountId")]
+    pub claude_account_id: Option<String>,
+    #[serde(rename = "claudeConsoleAccountId")]
+    pub claude_console_account_id: Option<String>,
+    #[serde(rename = "geminiAccountId")]
+    pub gemini_account_id: Option<String>,
+    #[serde(rename = "openaiAccountId")]
+    pub openai_account_id: Option<String>,
+    #[serde(rename = "bedrockAccountId")]
+    pub bedrock_account_id: Option<String>,
+    #[serde(rename = "droidAccountId")]
+    pub droid_account_id: Option<String>,
+    #[serde(rename = "enableModelRestriction")]
+    pub enable_model_restriction: Option<bool>,
+    #[serde(rename = "restrictedModels", default)]
+    pub restricted_models: Vec<String>,
+    #[serde(rename = "enableClientRestriction")]
+    pub enable_client_restriction: Option<bool>,
+    #[serde(rename = "allowedClients", default)]
+    pub allowed_clients: Vec<String>,
+    #[serde(rename = "isActive")]
     pub is_active: Option<bool>,
+    #[serde(rename = "ownerId")]
+    pub owner_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -209,6 +246,7 @@ pub fn create_admin_routes(
             "/claude-accounts/exchange-code",
             post(exchange_code_handler),
         )
+        .route("/claude-accounts/usage", get(get_claude_accounts_usage_handler))
         // 其他账户类型管理（占位实现）
         .route("/gemini-accounts", get(list_gemini_accounts_handler))
         .route("/openai-accounts", get(list_openai_accounts_handler))
@@ -407,8 +445,8 @@ async fn list_claude_accounts_handler(
 
     let mut conn = state.redis.get_connection().await?;
 
-    // 查询所有 Claude Console 账户
-    let pattern = "claude_console_account:*";
+    // 查询所有 Claude 账户 (包括 Console 和 Official)
+    let pattern = "claude_account:*";
     let keys: Vec<String> = redis::cmd("KEYS")
         .arg(pattern)
         .query_async(&mut conn)
@@ -438,12 +476,69 @@ async fn list_claude_accounts_handler(
     }))))
 }
 
+/// 获取Claude账户使用统计数据（简化实现）
+async fn get_claude_accounts_usage_handler(
+    State(state): State<Arc<AdminRouteState>>,
+) -> Result<impl IntoResponse, AppError> {
+    info!("📊 Fetching Claude accounts usage data");
+
+    let mut conn = state.redis.get_connection().await?;
+
+    // 查询所有 Claude 账户
+    let pattern = "claude_account:*";
+    let keys: Vec<String> = redis::cmd("KEYS")
+        .arg(pattern)
+        .query_async(&mut conn)
+        .await
+        .map_err(|e| {
+            error!("Failed to query Claude account keys: {}", e);
+            AppError::InternalError("Failed to fetch accounts".to_string())
+        })?;
+
+    // 构建 usage map: { accountId: usageData }
+    // 目前返回空对象，因为使用数据未实现完整的 OAuth usage API 调用
+    let mut usage_map = serde_json::Map::new();
+
+    for key in keys {
+        // 从 key 中提取 account ID
+        // key 格式: "claude_account:claude_acc_xxx" 或 "claude_account:xxx"
+        let account_id = key.strip_prefix("claude_account:").unwrap_or(&key);
+
+        // 目前返回 null，前端会显示"暂无统计"
+        // 未来可以从 Redis 读取缓存的 usage 数据
+        usage_map.insert(account_id.to_string(), serde_json::Value::Null);
+    }
+
+    info!("✅ Retrieved usage data for {} Claude accounts", usage_map.len());
+
+    Ok((StatusCode::OK, Json(json!({
+        "success": true,
+        "data": usage_map
+    }))))
+}
+
 /// 创建Claude账户（真实Redis实现）
 async fn create_claude_account_handler(
     State(state): State<Arc<AdminRouteState>>,
-    Json(request): Json<ClaudeAccountRequest>,
+    body: String,
 ) -> Result<impl IntoResponse, AppError> {
+    info!("➕ Received create account request, body: {}", body);
+
+    // Try to deserialize manually to see what's wrong
+    let request: ClaudeAccountRequest = serde_json::from_str(&body)
+        .map_err(|e| {
+            error!("Failed to deserialize request: {:?}", e);
+            AppError::BadRequest(format!("Invalid request format: {}", e))
+        })?;
+
     info!("➕ Creating Claude account: {}", request.name);
+
+    // Infer account type from endpoint if not provided
+    let mut request = request;
+    if request.account_type.is_empty() {
+        // Default to claude-console for this endpoint
+        request.account_type = "claude-console".to_string();
+    }
 
     // 验证必需字段
     if request.name.trim().is_empty() {
@@ -454,8 +549,23 @@ async fn create_claude_account_handler(
         return Err(AppError::BadRequest("Invalid account type".to_string()));
     }
 
-    if request.session_token.is_none() {
-        return Err(AppError::BadRequest("Session token is required".to_string()));
+    // Validate credentials based on account type
+    // Claude Console can use either session token or API key
+    if request.account_type == "claude-console" {
+        if request.session_token.is_none() && request.api_key.is_none() {
+            return Err(AppError::BadRequest(
+                "Either session token or API key is required for Claude Console".to_string()
+            ));
+        }
+        if request.api_key.is_some() && request.api_url.is_none() {
+            return Err(AppError::BadRequest(
+                "API URL is required when using API key".to_string()
+            ));
+        }
+    } else if request.account_type == "claude-official" {
+        if request.session_token.is_none() {
+            return Err(AppError::BadRequest("Session token is required for Claude Official".to_string()));
+        }
     }
 
     // 生成账户 ID (UUID 类型，不是字符串!)
@@ -498,7 +608,9 @@ async fn create_claude_account_handler(
         "concurrencyLimit": 5,  // 并发限制
         "currentConcurrency": 0,  // 当前并发数
         "notes": null,
-        "session_token": request.session_token.unwrap(),  // Claude Console 专用
+        "session_token": request.session_token,  // Claude Console 专用 (可选)
+        "api_key": request.api_key,  // Claude Console API Key (可选)
+        "api_url": request.api_url,  // Claude Console API URL (可选)
         "custom_api_endpoint": request.custom_api_endpoint,  // Claude Console 专用
         "createdAt": chrono::Utc::now(),
         "updatedAt": chrono::Utc::now()
@@ -681,6 +793,27 @@ async fn create_api_key_handler(
         permissions,
         is_active: true,
         tags: key_request.tags.clone(),  // 传递标签
+        // 账户绑定
+        claude_account_id: key_request.claude_account_id.clone(),
+        claude_console_account_id: key_request.claude_console_account_id.clone(),
+        gemini_account_id: key_request.gemini_account_id.clone(),
+        openai_account_id: key_request.openai_account_id.clone(),
+        azure_openai_account_id: None,  // 前端未传递
+        bedrock_account_id: key_request.bedrock_account_id.clone(),
+        droid_account_id: key_request.droid_account_id.clone(),
+        // 其他可选字段
+        token_limit: key_request.token_limit.unwrap_or(0),
+        concurrency_limit: key_request.concurrency_limit.map(|v| v as i64).unwrap_or(0),
+        rate_limit_window: key_request.rate_limit_window.map(|v| v as i64),
+        rate_limit_requests: key_request.rate_limit_requests.map(|v| v as i64),
+        rate_limit_cost: key_request.rate_limit_cost,
+        daily_cost_limit: key_request.daily_cost_limit.unwrap_or(0.0),
+        total_cost_limit: key_request.total_cost_limit.unwrap_or(0.0),
+        weekly_opus_cost_limit: key_request.weekly_opus_cost_limit.unwrap_or(0.0),
+        enable_model_restriction: key_request.enable_model_restriction.unwrap_or(false),
+        restricted_models: key_request.restricted_models.clone(),
+        enable_client_restriction: key_request.enable_client_restriction.unwrap_or(false),
+        allowed_clients: key_request.allowed_clients.clone(),
         ..Default::default()
     };
 
@@ -709,10 +842,33 @@ async fn update_api_key_handler(
     info!("🔄 Updating API key: {} with name: {}", id, key_request.name);
 
     // 调用 ApiKeyService 的更新方法
-    // 支持更新 name, is_active, account_id (映射到 claude_console_account_id)
+    // 支持更新所有字段：名称、状态、账户绑定、限制、标签、模型/客户端限制
     let updated_key = state
         .api_key_service
-        .update_key(&id, Some(key_request.name), key_request.is_active, key_request.account_id)
+        .update_key(
+            &id,
+            Some(key_request.name.clone()),
+            key_request.is_active,
+            key_request.account_id.clone(),
+            key_request.claude_account_id.clone().map(Some),
+            key_request.claude_console_account_id.clone().map(Some),
+            key_request.gemini_account_id.clone().map(Some),
+            key_request.openai_account_id.clone().map(Some),
+            key_request.bedrock_account_id.clone().map(Some),
+            key_request.droid_account_id.clone().map(Some),
+            key_request.rate_limit_window,
+            key_request.rate_limit_requests,
+            key_request.rate_limit_cost,
+            key_request.concurrency_limit,
+            key_request.daily_cost_limit,
+            key_request.total_cost_limit,
+            key_request.weekly_opus_cost_limit,
+            Some(key_request.tags.clone()),
+            key_request.enable_model_restriction,
+            Some(key_request.restricted_models.clone()),
+            key_request.enable_client_restriction,
+            Some(key_request.allowed_clients.clone()),
+        )
         .await?;
 
     let response = json!({
