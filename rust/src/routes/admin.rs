@@ -587,9 +587,7 @@ async fn create_claude_account_handler(
         "refreshToken": null,
         "expiresAt": null,
         "scopes": null,
-        "proxy": request.custom_api_endpoint.as_ref().map(|_| json!({
-            "endpoint": request.custom_api_endpoint
-        }).to_string()),
+        "proxy": null,  // Proxy should only be set if there's an actual HTTP/SOCKS proxy
         "isActive": request.is_active.unwrap_or(true),
         "accountType": "shared",  // AccountType enum: shared/dedicated
         "platform": "claudeconsole",  // Platform enum: claudeconsole for Claude Console accounts
