@@ -161,6 +161,39 @@ pub fn is_claude_code_prompt(system_prompt: &str) -> bool {
     check_prompt_similarity(system_prompt, DEFAULT_THRESHOLD).matched
 }
 
+/// Check if a system prompt matches any Claude Code template using a custom threshold
+///
+/// This function allows you to specify a custom threshold for more strict or lenient matching.
+/// Node.js implementation uses 1.0 (100% match) for strict validation.
+///
+/// # Arguments
+///
+/// * `system_prompt` - The system prompt to validate
+/// * `threshold` - Minimum similarity score (0.0 - 1.0)
+///
+/// # Examples
+///
+/// ```
+/// use crate::utils::prompt_similarity::matcher::is_claude_code_prompt_with_threshold;
+///
+/// // Strict validation (100% match required)
+/// let is_exact = is_claude_code_prompt_with_threshold(
+///     "You are Claude Code, Anthropic's official CLI for Claude.",
+///     1.0
+/// );
+/// assert!(is_exact);
+///
+/// // Lenient validation
+/// let is_similar = is_claude_code_prompt_with_threshold(
+///     "You are Claude Code, official CLI.",
+///     0.7
+/// );
+/// assert!(is_similar);
+/// ```
+pub fn is_claude_code_prompt_with_threshold(system_prompt: &str, threshold: f64) -> bool {
+    check_prompt_similarity(system_prompt, threshold).matched
+}
+
 /// Get the best matching template for a system prompt
 ///
 /// Returns the template ID and score of the best match, or None if no match found.

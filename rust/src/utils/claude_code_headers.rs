@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use super::prompt_similarity::is_claude_code_prompt;
+use super::prompt_similarity::is_claude_code_prompt_with_threshold;
 
 /// 默认的 Claude Code headers
 ///
@@ -108,9 +108,17 @@ fn extract_system_prompt(request_body: &serde_json::Value) -> Option<String> {
 
 /// 检查请求体是否来自真实的 Claude Code 客户端
 ///
-/// 使用多层验证：
-/// 1. 系统提示词相似度匹配（主要方法）
-/// 2. metadata.user_id 格式检查（辅助方法）
+/// **完全对齐 Node.js 实现**：
+/// 1. model 字段必须存在且为字符串
+/// 2. system 字段必须是数组格式（字符串格式将被拒绝）
+/// 3. 逐个检查每个 system entry，使用阈值 1.0 (100% 匹配)
+/// 4. 任意一个 entry 达到阈值即返回 true
+/// 5. metadata.user_id 作为备用验证
+///
+/// # Node.js 参考
+///
+/// - `claudeRelayService.js:96-98` - 调用时阈值为 1.0
+/// - `claudeCodeValidator.js:82-122` - 实现细节
 ///
 /// # Arguments
 ///
@@ -125,12 +133,23 @@ fn extract_system_prompt(request_body: &serde_json::Value) -> Option<String> {
 /// ```
 /// use serde_json::json;
 ///
+/// // ✅ 真实的 Claude Code 请求（数组格式 + 100% 匹配）
+/// let body = json!({
+///     "model": "claude-3-5-sonnet-20241022",
+///     "system": [
+///         {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}
+///     ],
+///     "messages": []
+/// });
+/// assert!(is_real_claude_code_request(&body));
+///
+/// // ❌ 字符串格式会被拒绝（不是真实请求）
 /// let body = json!({
 ///     "model": "claude-3-5-sonnet-20241022",
 ///     "system": "You are Claude Code, Anthropic's official CLI for Claude.",
 ///     "messages": []
 /// });
-/// assert!(is_real_claude_code_request(&body));
+/// assert!(!is_real_claude_code_request(&body));
 /// ```
 pub fn is_real_claude_code_request(request_body: &serde_json::Value) -> bool {
     // 0. 检查 model 字段必须存在且为字符串（与 Node.js 对齐）
@@ -139,21 +158,58 @@ pub fn is_real_claude_code_request(request_body: &serde_json::Value) -> bool {
         return false;
     }
 
-    // 方法1: 检查系统提示词相似度（主要方法，准确度高）
-    if let Some(system_prompt) = extract_system_prompt(request_body) {
-        if is_claude_code_prompt(&system_prompt) {
-            return true;
+    // 1. 检查 system 字段必须是数组（与 Node.js 对齐）
+    // Node.js: const systemEntries = Array.isArray(body.system) ? body.system : null
+    //          if (!systemEntries) { return false }
+    // 真实的 Claude Code 请求的 system 永远是数组格式
+    let system_array = match request_body.get("system") {
+        Some(s) if s.is_array() => s.as_array().unwrap(),
+        _ => {
+            // 不是数组 -> 不是真实的 Claude Code 请求
+            // 继续检查 metadata.user_id 作为备用
+            if let Some(metadata) = request_body.get("metadata") {
+                if let Some(user_id) = metadata.get("user_id").and_then(|u| u.as_str()) {
+                    if user_id.starts_with("user_") && user_id.contains("_account__session_") {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+    };
+
+    // 2. 逐个检查每个 system entry，使用阈值 1.0（与 Node.js 对齐）
+    // Node.js: for (const entry of systemEntries) {
+    //            const { bestScore } = bestSimilarityByTemplates(rawText)
+    //            if (bestScore >= threshold) { return true }  // threshold = 1.0
+    //          }
+    const STRICT_THRESHOLD: f64 = 1.0; // 100% 匹配
+
+    for entry in system_array {
+        // 提取 entry.text 字段
+        let text = if let Some(obj) = entry.as_object() {
+            obj.get("text").and_then(|t| t.as_str())
+        } else if let Some(text_str) = entry.as_str() {
+            // 也支持直接的字符串元素
+            Some(text_str)
+        } else {
+            None
+        };
+
+        if let Some(text) = text {
+            // 对每个 entry 单独检查，使用阈值 1.0
+            if is_claude_code_prompt_with_threshold(text, STRICT_THRESHOLD) {
+                return true; // 找到一个 100% 匹配的 entry
+            }
         }
     }
 
-    // 方法2: 检查 metadata.user_id 字段（辅助方法，作为备用）
+    // 3. 备用：metadata.user_id 检查
     if let Some(metadata) = request_body.get("metadata") {
-        if let Some(user_id) = metadata.get("user_id") {
-            if let Some(user_id_str) = user_id.as_str() {
-                // Claude Code 的 user_id 格式: user_{64位hex}_account__session_{uuid}
-                if user_id_str.starts_with("user_") && user_id_str.contains("_account__session_") {
-                    return true;
-                }
+        if let Some(user_id) = metadata.get("user_id").and_then(|u| u.as_str()) {
+            // Claude Code 的 user_id 格式: user_{64位hex}_account__session_{uuid}
+            if user_id.starts_with("user_") && user_id.contains("_account__session_") {
+                return true;
             }
         }
     }
@@ -250,15 +306,17 @@ mod tests {
     }
 
     #[test]
-    fn test_is_real_claude_code_request_with_system_prompt() {
+    fn test_is_real_claude_code_request_with_system_prompt_string() {
+        // 字符串格式的 system 应该被拒绝（与 Node.js 对齐）
+        // 真实的 Claude Code 请求的 system 永远是数组格式
         let body = json!({
             "model": "claude-3-5-sonnet-20241022",
             "system": "You are Claude Code, Anthropic's official CLI for Claude.",
             "messages": []
         });
         assert!(
-            is_real_claude_code_request(&body),
-            "应该通过系统提示词相似度检测到 Claude Code"
+            !is_real_claude_code_request(&body),
+            "字符串格式的 system 不应该被识别为真实的 Claude Code（与 Node.js 对齐）"
         );
     }
 
@@ -292,15 +350,32 @@ mod tests {
     }
 
     #[test]
-    fn test_is_real_claude_code_request_with_agent_sdk_prompt() {
+    fn test_is_real_claude_code_request_with_agent_sdk_prompt_string() {
+        // 字符串格式应该被拒绝（与 Node.js 对齐）
         let body = json!({
             "model": "claude-3-5-sonnet-20241022",
             "system": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
             "messages": []
         });
         assert!(
+            !is_real_claude_code_request(&body),
+            "字符串格式的 system 不应该被识别（即使内容匹配）"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_with_agent_sdk_prompt_array() {
+        // 数组格式 + 100% 匹配 → 应该通过
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "system": [
+                {"type": "text", "text": "You are a Claude agent, built on Anthropic's Claude Agent SDK."}
+            ],
+            "messages": []
+        });
+        assert!(
             is_real_claude_code_request(&body),
-            "应该识别 Agent SDK 提示词"
+            "数组格式 + Agent SDK 提示词应该识别"
         );
     }
 
@@ -351,6 +426,74 @@ mod tests {
         assert!(
             !is_real_claude_code_request(&body),
             "model 字段不是字符串的请求不应该被识别"
+        );
+    }
+
+    #[test]
+    fn test_strict_threshold_rejects_partial_similarity() {
+        // 测试阈值 1.0 的严格验证
+        // 部分相似（70%）应该被拒绝
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "system": [
+                {"type": "text", "text": "You are Claude, a helpful AI assistant."}
+            ],
+            "messages": []
+        });
+        assert!(
+            !is_real_claude_code_request(&body),
+            "相似度 < 100% 应该被拒绝（阈值 1.0）"
+        );
+    }
+
+    #[test]
+    fn test_mixed_entries_with_one_exact_match() {
+        // 混合数组：包含一个 100% 匹配的 entry + 其他不匹配的
+        // Node.js 行为：找到一个 100% 匹配就返回 true
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "system": [
+                {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."},
+                {"type": "text", "text": "Additional custom instructions here."}
+            ],
+            "messages": []
+        });
+        assert!(
+            is_real_claude_code_request(&body),
+            "包含一个 100% 匹配的 entry 就应该通过"
+        );
+    }
+
+    #[test]
+    fn test_mixed_entries_without_exact_match() {
+        // 混合数组：没有任何 entry 达到 100% 匹配
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "system": [
+                {"type": "text", "text": "You are Claude, a helpful assistant."},
+                {"type": "text", "text": "Additional instructions."}
+            ],
+            "messages": []
+        });
+        assert!(
+            !is_real_claude_code_request(&body),
+            "没有 100% 匹配的 entry 应该被拒绝"
+        );
+    }
+
+    #[test]
+    fn test_array_with_secondary_template() {
+        // 测试 secondary 模板也能通过
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
+            "system": [
+                {"type": "text", "text": "You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user."}
+            ],
+            "messages": []
+        });
+        assert!(
+            is_real_claude_code_request(&body),
+            "secondary 模板应该识别"
         );
     }
 

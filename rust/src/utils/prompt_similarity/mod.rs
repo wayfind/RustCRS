@@ -27,8 +27,8 @@ pub mod templates;
 // Re-export commonly used items
 pub use algorithm::{calculate_similarity, dice_coefficient, SimilarityResult};
 pub use matcher::{
-    check_prompt_similarity, get_all_scores, get_best_match, is_claude_code_prompt, BestMatch,
-    MatchResult, TemplateScore,
+    check_prompt_similarity, get_all_scores, get_best_match, is_claude_code_prompt,
+    is_claude_code_prompt_with_threshold, BestMatch, MatchResult, TemplateScore,
 };
 pub use normalizer::{collapse_whitespace, normalize_text, PLACEHOLDER_TOKEN};
 pub use templates::{
