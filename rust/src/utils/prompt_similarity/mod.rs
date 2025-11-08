@@ -21,10 +21,15 @@
 
 pub mod algorithm;
 pub mod normalizer;
+pub mod templates;
 
 // Re-export commonly used items
 pub use algorithm::{calculate_similarity, dice_coefficient, SimilarityResult};
 pub use normalizer::{collapse_whitespace, normalize_text, PLACEHOLDER_TOKEN};
+pub use templates::{
+    get_all_templates, get_template_by_id, get_templates_by_category, PromptCategory,
+    PromptTemplate, CLAUDE_CODE_TEMPLATES,
+};
 
 /// Default similarity threshold for Claude Code prompt detection
 ///
