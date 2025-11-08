@@ -2,6 +2,7 @@ use crate::models::{AccountType, ClaudeAccount, Platform};
 use crate::redis::RedisPool;
 use crate::services::account::ClaudeAccountService;
 use crate::services::account_scheduler::{AccountScheduler, SelectedAccount};
+use crate::utils::claude_code_headers;
 use crate::utils::error::{AppError, Result};
 use anyhow::Context;
 use bytes::Bytes;
@@ -295,6 +296,29 @@ impl ClaudeRelayService {
             "claude-relay-service/1.0"  // Default for other platforms
         };
         request_builder = request_builder.header("User-Agent", user_agent);
+
+        // 为 Claude Console 账户添加 Claude Code headers
+        if account.platform == Platform::ClaudeConsole {
+            // 将请求体转换为 JSON Value 以检查是否是真实的 Claude Code 请求
+            let request_json = serde_json::to_value(request_body)
+                .unwrap_or_else(|_| serde_json::json!({}));
+
+            let is_real_claude_code = claude_code_headers::is_real_claude_code_request(&request_json);
+
+            if !is_real_claude_code {
+                debug!("Adding default Claude Code headers for Claude Console account");
+
+                // 获取默认 Claude Code headers
+                let claude_headers = claude_code_headers::get_default_claude_code_headers();
+
+                // 添加每个 header
+                for (key, value) in claude_headers {
+                    request_builder = request_builder.header(key, value);
+                }
+            } else {
+                debug!("Real Claude Code request detected, using client headers");
+            }
+        }
 
         let request_builder = request_builder.json(request_body);
 
@@ -654,6 +678,25 @@ impl ClaudeRelayService {
             "claude-relay-service/1.0"  // Default for other platforms
         };
         request_builder = request_builder.header("User-Agent", user_agent);
+
+        // 为 Claude Console 账户添加 Claude Code headers
+        if account.platform == Platform::ClaudeConsole {
+            // 将请求体转换为 JSON Value 以检查是否是真实的 Claude Code 请求
+            let request_json = serde_json::to_value(&stream_body)
+                .unwrap_or_else(|_| serde_json::json!({}));
+
+            let is_real_claude_code = claude_code_headers::is_real_claude_code_request(&request_json);
+
+            if !is_real_claude_code {
+                // 获取默认 Claude Code headers
+                let claude_headers = claude_code_headers::get_default_claude_code_headers();
+
+                // 添加每个 header
+                for (key, value) in claude_headers {
+                    request_builder = request_builder.header(key, value);
+                }
+            }
+        }
 
         let response = timeout(
             Duration::from_secs(config.timeout_seconds),

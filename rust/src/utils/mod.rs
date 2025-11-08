@@ -1,3 +1,4 @@
+pub mod claude_code_headers;
 pub mod cost_calculator;
 pub mod crypto;
 pub mod error;
