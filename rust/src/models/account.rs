@@ -114,8 +114,8 @@ pub struct SubscriptionInfo {
 /// Claude 账户模型
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClaudeAccount {
-    /// 账户唯一标识符
-    pub id: Uuid,
+    /// 账户唯一标识符（包含前缀，如 "claude_acc_xxx"）
+    pub id: String,
     /// 账户名称
     pub name: String,
     /// 账户描述

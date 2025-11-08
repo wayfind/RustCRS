@@ -568,7 +568,7 @@ async fn create_claude_account_handler(
         }
     }
 
-    // 生成账户 ID (UUID 类型，不是字符串!)
+    // 生成账户 ID
     let account_uuid = uuid::Uuid::new_v4();
     let account_id = format!("claude_acc_{}", account_uuid);
 
@@ -577,7 +577,7 @@ async fn create_claude_account_handler(
 
     // 构建符合 ClaudeAccount 结构的完整账户数据
     let account_data = json!({
-        "id": account_uuid,  // UUID 类型
+        "id": account_id,  // 使用完整的账户 ID (包括前缀)
         "name": request.name,
         "description": request.description,
         "email": null,

@@ -91,8 +91,7 @@ impl ClaudeAccountService {
 
         // 4. Create account with encrypted sensitive data
         let mut account = ClaudeAccount {
-            id: Uuid::parse_str(&account_id)
-                .map_err(|e| AppError::InternalError(format!("Invalid UUID: {}", e)))?,
+            id: account_id.clone(),
             name: options.name.clone(),
             description: options.description.clone(),
             email: None,
