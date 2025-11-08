@@ -1,0 +1,91 @@
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Playwright 配置文件 - Claude Relay Service UI 测试
+ *
+ * 测试范围：
+ * - 管理界面基本功能
+ * - 账户管理流程
+ * - API Key 管理
+ * - 统计面板
+ */
+
+export default defineConfig({
+  // 测试目录
+  testDir: './e2e',
+
+  // 测试文件匹配模式
+  testMatch: '**/*.spec.js',
+
+  // 全局超时设置
+  timeout: 30 * 1000,
+  expect: {
+    timeout: 5000
+  },
+
+  // 失败重试次数
+  retries: process.env.CI ? 2 : 0,
+
+  // 并行执行配置
+  workers: process.env.CI ? 1 : undefined,
+
+  // 报告配置
+  reporter: [
+    ['html', { outputFolder: 'playwright-report' }],
+    ['list'],
+    ['json', { outputFile: 'playwright-report/results.json' }]
+  ],
+
+  // 全局配置
+  use: {
+    // 基础 URL - 指向 Vite 开发服务器
+    baseURL: process.env.BASE_URL || 'http://localhost:3001',
+
+    // 截图设置
+    screenshot: 'only-on-failure',
+
+    // 视频录制
+    video: 'retain-on-failure',
+
+    // 追踪
+    trace: 'on-first-retry',
+
+    // 浏览器上下文选项
+    viewport: { width: 1280, height: 720 },
+    ignoreHTTPSErrors: true,
+
+    // 导航超时
+    navigationTimeout: 15000,
+    actionTimeout: 10000,
+  },
+
+  // 测试项目配置 - 多浏览器测试
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+
+    // 可选：Firefox 测试
+    // {
+    //   name: 'firefox',
+    //   use: { ...devices['Desktop Firefox'] },
+    // },
+
+    // 可选：移动端测试
+    // {
+    //   name: 'Mobile Chrome',
+    //   use: { ...devices['Pixel 5'] },
+    // },
+  ],
+
+  // Web Server 配置 - 自动启动开发服务器
+  webServer: {
+    command: 'npm run dev',
+    port: 3001,
+    timeout: 120 * 1000,
+    reuseExistingServer: !process.env.CI,
+    stdout: 'ignore',
+    stderr: 'pipe',
+  },
+});
