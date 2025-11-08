@@ -63,14 +63,19 @@ issue-todo.md (待修复)
 
 ## 🔴 待修复问题 (Active Issues)
 
-**当前状态**: ⚠️ **E2E 诊断完成，发现 1 个新特性缺失（来自 Batch 20 E2E 诊断）**
+**当前状态**: 🔴 **发现 P0 阻塞性问题 - API Key 认证逻辑失败**
 
 > 批次 17: ✅ Claude 账户使用数据端点和 Favicon 静态文件已修复
 > 批次 18: ✅ Claude Account session_token 字段支持 - 已修复
 > 批次 19: ✅ User-Agent 和 Custom Endpoint 支持 - 已修复
-> **批次 20**: ✅ **E2E 诊断完成 - Rust 后端核心功能验证通过，发现 1 个缺失特性**
+> 批次 20: ✅ E2E 诊断完成 - Rust 后端核心功能验证通过，发现 1 个缺失特性
+> **批次 21**: 🔴 **Claude Console E2E 测试 - 发现 P0 认证问题**
 
-**📊 待修复统计**: 3 个问题（P2 × 2，P3 × 2）- 均为非阻塞性问题
+**📊 待修复统计**: 4 个问题（P0 × 1, P1 × 1, P2 × 1，P3 × 1）
+- 🔴 **P0（阻塞性）**: 1 个 - API Key 认证逻辑失败
+- 🟠 **P1（高优先级）**: 1 个 - E2E 测试脚本配置
+- 🟡 **P2（中优先级）**: 1 个 - 管理登录返回空响应
+- 🟢 **P3（低优先级）**: 1 个 - Favicon 静态文件
 
 ---
 
@@ -142,6 +147,103 @@ issue-todo.md (待修复)
 **集成测试名称**: `test_e2e_api_key_automation`
 
 **参考文档**: `claudedocs/e2e-test-findings-2025-11-06-3.md`
+
+---
+
+#### ISSUE-AUTH-001 - API Key 认证逻辑失败（Claude Console）
+
+**优先级**: P0 (阻塞性 - 阻止所有 Claude Console API 请求)
+**模块**: 后端/认证中间件
+**状态**: 🔴 待修复
+**发现时间**: 2025-11-08
+**发现方式**: Claude Console E2E 测试
+
+**重现步骤**:
+1. 创建 Claude Console 账户（session token 或 API key）
+2. 创建 API Key 并绑定到该账户：使用字段 `claudeConsoleAccountId`
+3. 验证 Redis 数据：API Key 正确存储，账户绑定正确
+4. 发送请求到 `/api/v1/messages` 使用该 API Key
+5. 观察请求返回 HTTP 401 "API key not found"
+
+**预期行为**:
+- API Key 认证中间件从 Redis 查找 API Key
+- 找到对应的 API Key 数据
+- 验证权限和账户绑定
+- 继续处理请求
+
+**实际行为**:
+```json
+{"error":"Invalid API key","message":"API key not found"}
+```
+
+**错误信息**:
+- HTTP 状态码: 401 Unauthorized
+- 错误类型: 认证失败
+- 详细信息: API key not found
+
+**🔍 根因分析**:
+- **直接症状**: API Key 认证中间件无法找到已存储的 API Key
+- **为什么 1**: Redis 查询可能使用了错误的字段名或查询逻辑
+- **为什么 2**: 可能存在 camelCase/snake_case 字段映射问题
+- **为什么 3**: 认证中间件的反序列化逻辑可能与存储格式不匹配
+- **为什么 4**: 缺少足够的错误日志导致难以定位问题
+- **为什么 5**: **认证中间件的实现与 API Key Service 的存储格式之间存在不一致**
+- **根因类型**: 🐛 代码缺陷 - 数据访问层不一致
+- **依赖问题**: 无
+- **阻塞问题**:
+  - ❌ 所有 Claude Console 账户的 API 请求
+  - ❌ E2E 测试验证
+  - ❌ 系统提示词相似度检测测试
+- **影响范围**:
+  - ❌ **完全阻塞 Claude Console 功能**
+  - ✅ 不影响账户和 API Key 的创建和管理
+  - ✅ Redis 数据存储正确
+
+**技术分析**:
+```
+API Key: cr_ca546081a6206756a464276af57b4cde24ea11cdbbc7c9f02ebddfeaf6081873
+计算的 SHA-256 哈希: a25ca3ed93805788125c5e36f1686a7b20a6918a9860f3d76607a863a2a48612
+
+Redis 验证:
+✅ api_key_hash:a25ca3ed... → ac6741bb-1cb7-42bd-a667-3bbcdc8264e4
+✅ api_key:ac6741bb... → 完整数据存在
+✅ claudeConsoleAccountId: "claude_acc_9d431201-7dad-486c-a705-4f26f06823df"
+✅ isActive: true
+✅ isDeleted: false
+✅ permissions: "claude"
+
+结论: Redis 数据完全正确，问题在于认证中间件的查询逻辑
+```
+
+**需要检查的代码位置**:
+1. `rust/src/middleware/auth.rs` - `authenticate_api_key` 函数
+   - Redis 查询逻辑
+   - 字段反序列化
+   - 错误处理和日志
+2. `rust/src/services/api_key_service.rs` - API Key 查询方法
+   - `get_key_by_hash` 或类似函数
+   - 数据模型映射
+3. `rust/src/models/api_key.rs` - API Key 数据模型
+   - 字段名定义（camelCase vs snake_case）
+   - serde 配置
+
+**修复建议**:
+1. **立即行动**:
+   - 添加详细的调试日志到认证中间件
+   - 记录接收到的 API Key、计算的哈希值、Redis 查询结果
+   - 单步调试认证流程
+2. **修复方向**:
+   - 检查字段名映射是否一致
+   - 验证 Redis 查询语句
+   - 确保反序列化逻辑正确
+3. **测试验证**:
+   - 添加认证中间件的单元测试
+   - 添加 API Key 查询的集成测试
+   - 重新运行 E2E 测试
+
+**集成测试名称**: `test_api_key_authentication_claude_console`
+
+**参考文档**: `claudedocs/e2e-test-report-claude-console-20251108.md`
 
 ---
 
