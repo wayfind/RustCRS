@@ -152,7 +152,7 @@ CLAUDE_ACCOUNT_IDS=()
 if [ -z "${CLAUDE_ACCOUNTS}" ]; then
     log_warning "No Claude Console accounts in credentials.json"
 else
-    echo "${CLAUDE_ACCOUNTS}" | while IFS= read -r account; do
+    while IFS= read -r account; do
         ACCOUNT_NAME=$(echo "$account" | jq -r '.name')
         SESSION_TOKEN=$(echo "$account" | jq -r '.session_token')
         CUSTOM_ENDPOINT=$(echo "$account" | jq -r '.custom_api_endpoint // "https://api.claude.ai"')
@@ -168,13 +168,13 @@ else
             -d "{
                 \"name\": \"${ACCOUNT_NAME}\",
                 \"description\": \"E2E Test Account (from credentials.json)\",
-                \"session_token\": \"${SESSION_TOKEN}\",
-                \"custom_api_endpoint\": \"${CUSTOM_ENDPOINT}\",
+                \"sessionToken\": \"${SESSION_TOKEN}\",
+                \"customApiEndpoint\": \"${CUSTOM_ENDPOINT}\",
                 \"priority\": ${PRIORITY},
                 \"isActive\": ${ACTIVE}
             }")
 
-        ACCOUNT_ID=$(echo "${CREATE_RESPONSE}" | jq -r '.data.id')
+        ACCOUNT_ID=$(echo "${CREATE_RESPONSE}" | jq -r '.account.id')
 
         if [ -z "${ACCOUNT_ID}" ] || [ "${ACCOUNT_ID}" == "null" ]; then
             log_error "Failed to create account: ${ACCOUNT_NAME}"
@@ -183,7 +183,7 @@ else
             log_success "Created account: ${ACCOUNT_NAME} (ID: ${ACCOUNT_ID})"
             CLAUDE_ACCOUNT_IDS+=("${ACCOUNT_ID}")
         fi
-    done
+    done < <(echo "${CLAUDE_ACCOUNTS}")
 fi
 
 echo ""
