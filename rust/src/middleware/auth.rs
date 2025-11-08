@@ -44,15 +44,28 @@ pub async fn authenticate_api_key(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    // 1. 提取 Authorization header
-    let auth_header = request
+    // 1. 提取 API Key - 支持两种格式:
+    //    - Authorization: Bearer <api_key> (标准格式)
+    //    - x-api-key: <api_key> (Claude API 格式)
+    let api_key = if let Some(auth_header) = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
-        .ok_or_else(|| AppError::Unauthorized("Missing Authorization header".to_string()))?;
-
-    // 2. 解析 Bearer token
-    let api_key = parse_bearer_token(auth_header)?;
+    {
+        // 从 Authorization header 解析
+        parse_bearer_token(auth_header)?
+    } else if let Some(x_api_key) = request
+        .headers()
+        .get("x-api-key")
+        .and_then(|h| h.to_str().ok())
+    {
+        // 从 x-api-key header 获取
+        x_api_key.trim().to_string()
+    } else {
+        return Err(AppError::Unauthorized(
+            "Missing Authorization or x-api-key header".to_string(),
+        ));
+    };
 
     // 3. 验证 API Key
     let validated_key = service.validate_key(&api_key).await?;
@@ -112,28 +125,37 @@ pub async fn optional_authenticate_api_key(
     mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
-    // 检查是否有 Authorization header
-    if let Some(auth_header) = request
+    // 检查是否有 Authorization 或 x-api-key header
+    let api_key_opt = if let Some(auth_header) = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
     {
-        // 如果有,则尝试验证
-        match parse_bearer_token(auth_header) {
-            Ok(api_key) => match service.validate_key(&api_key).await {
-                Ok(validated_key) => {
-                    let auth_state = AuthState {
-                        api_key: validated_key,
-                    };
-                    request.extensions_mut().insert(auth_state);
-                }
-                Err(_) => {
-                    // 验证失败,但不阻止请求 (可选认证)
-                    // 路由处理器可以检查是否存在 AuthState
-                }
-            },
+        // 从 Authorization header 解析
+        parse_bearer_token(auth_header).ok()
+    } else if let Some(x_api_key) = request
+        .headers()
+        .get("x-api-key")
+        .and_then(|h| h.to_str().ok())
+    {
+        // 从 x-api-key header 获取
+        Some(x_api_key.trim().to_string())
+    } else {
+        None
+    };
+
+    if let Some(api_key) = api_key_opt {
+        // 如果有 API Key,则尝试验证
+        match service.validate_key(&api_key).await {
+            Ok(validated_key) => {
+                let auth_state = AuthState {
+                    api_key: validated_key,
+                };
+                request.extensions_mut().insert(auth_state);
+            }
             Err(_) => {
-                // 解析失败,但不阻止请求
+                // 验证失败,但不阻止请求 (可选认证)
+                // 路由处理器可以检查是否存在 AuthState
             }
         }
     }
