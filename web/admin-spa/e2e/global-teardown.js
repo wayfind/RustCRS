@@ -5,6 +5,6 @@
  */
 
 export default async function globalTeardown() {
-  console.log('🧹 Global teardown running...');
-  console.log('✅ Global teardown complete');
+  console.log('🧹 Global teardown running...')
+  console.log('✅ Global teardown complete')
 }

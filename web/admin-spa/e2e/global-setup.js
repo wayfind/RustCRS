@@ -5,11 +5,11 @@
  */
 
 export default async function globalSetup() {
-  console.log('🔧 Global setup running...');
+  console.log('🔧 Global setup running...')
 
   // 检查环境
-  console.log(`   Base URL: ${process.env.BASE_URL || 'http://localhost:8080/admin-next'}`);
-  console.log(`   CI: ${process.env.CI || 'false'}`);
+  console.log(`   Base URL: ${process.env.BASE_URL || 'http://localhost:8080/admin-next'}`)
+  console.log(`   CI: ${process.env.CI || 'false'}`)
 
-  console.log('✅ Global setup complete');
+  console.log('✅ Global setup complete')
 }

@@ -1,4 +1,4 @@
-import { defineConfig, devices } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test'
 
 /**
  * Playwright 配置文件 - Claude Relay Service UI 测试
@@ -63,7 +63,7 @@ export default defineConfig({
     actionTimeout: 15000,
 
     // 服务worker
-    serviceWorkers: 'block',
+    serviceWorkers: 'block'
   },
 
   // 测试项目配置 - 多浏览器测试
@@ -71,7 +71,7 @@ export default defineConfig({
     // Firefox - 优先使用 Firefox 避免 Chromium 崩溃问题
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: { ...devices['Desktop Firefox'] }
     },
 
     // Chromium - 在某些环境下可能崩溃
@@ -88,15 +88,15 @@ export default defineConfig({
             '--disable-gpu'
           ]
         }
-      },
-    },
+      }
+    }
 
     // 可选：移动端测试
     // {
     //   name: 'Mobile Chrome',
     //   use: { ...devices['Pixel 5'] },
     // },
-  ],
+  ]
 
   // Web Server 配置 - Rust 后端需要手动启动
   // Rust 后端会自动提供静态文件服务在 /admin-next 路径
@@ -109,4 +109,4 @@ export default defineConfig({
   //   stdout: 'ignore',
   //   stderr: 'pipe',
   // },
-});
+})
