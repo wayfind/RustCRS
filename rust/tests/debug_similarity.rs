@@ -32,3 +32,14 @@ fn debug_helpful_ai_assistant_programming() {
         println!("{}: {:.4} ({:.2}%)", score.template_id, score.score, score.score * 100.0);
     }
 }
+
+#[test]
+fn debug_translation_assistant() {
+    let prompt = "You are a translation assistant that helps translate text between languages.";
+    let scores = get_all_scores(prompt);
+
+    println!("\n=== Debug: '{}' ===", prompt);
+    for score in scores {
+        println!("{}: {:.4} ({:.2}%)", score.template_id, score.score, score.score * 100.0);
+    }
+}

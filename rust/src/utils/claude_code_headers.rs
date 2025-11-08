@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use super::prompt_similarity::is_claude_code_prompt;
+
 /// 默认的 Claude Code headers
 ///
 /// 这些 headers 是 Claude Code CLI 客户端的标准 headers
@@ -55,23 +57,89 @@ pub fn get_claude_code_header_keys() -> Vec<&'static str> {
     ]
 }
 
-/// 检查请求体是否包含 Claude Code 系统提示词的特征
+/// 从请求体中提取系统提示词文本
 ///
-/// 简化版本：检查是否有 system 字段和特定的内容模式
-pub fn is_real_claude_code_request(request_body: &serde_json::Value) -> bool {
-    // 检查是否有 system 字段
-    if let Some(system) = request_body.get("system") {
-        // 如果 system 是数组，检查是否有内容
-        if let Some(system_array) = system.as_array() {
-            if !system_array.is_empty() {
-                // 简单判断：如果有 system 字段且不为空，可能是 Claude Code
-                // 更严格的验证需要检查系统提示词的相似度，但这里简化处理
-                return true;
+/// 支持多种格式：
+/// - system: "string"
+/// - system: [{"type": "text", "text": "..."}, ...]
+fn extract_system_prompt(request_body: &serde_json::Value) -> Option<String> {
+    let system = request_body.get("system")?;
+
+    // 情况1: system 是字符串
+    if let Some(text) = system.as_str() {
+        return Some(text.to_string());
+    }
+
+    // 情况2: system 是数组 [{"type": "text", "text": "..."}, ...]
+    if let Some(system_array) = system.as_array() {
+        let mut full_text = String::new();
+
+        for item in system_array {
+            if let Some(obj) = item.as_object() {
+                // 检查 type 是否为 "text"
+                if let Some(item_type) = obj.get("type") {
+                    if item_type.as_str() == Some("text") {
+                        if let Some(text) = obj.get("text") {
+                            if let Some(text_str) = text.as_str() {
+                                if !full_text.is_empty() {
+                                    full_text.push(' ');
+                                }
+                                full_text.push_str(text_str);
+                            }
+        }
+                    }
+                }
+            } else if let Some(text) = item.as_str() {
+                // 直接是字符串
+                if !full_text.is_empty() {
+                    full_text.push(' ');
+                }
+                full_text.push_str(text);
             }
+        }
+
+        if !full_text.is_empty() {
+            return Some(full_text);
         }
     }
 
-    // 检查 metadata.user_id 字段（Claude Code 特有）
+    None
+}
+
+/// 检查请求体是否来自真实的 Claude Code 客户端
+///
+/// 使用多层验证：
+/// 1. 系统提示词相似度匹配（主要方法）
+/// 2. metadata.user_id 格式检查（辅助方法）
+///
+/// # Arguments
+///
+/// * `request_body` - JSON 格式的请求体
+///
+/// # Returns
+///
+/// `true` 如果检测到这是真实的 Claude Code 请求
+///
+/// # Examples
+///
+/// ```
+/// use serde_json::json;
+///
+/// let body = json!({
+///     "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+///     "messages": []
+/// });
+/// assert!(is_real_claude_code_request(&body));
+/// ```
+pub fn is_real_claude_code_request(request_body: &serde_json::Value) -> bool {
+    // 方法1: 检查系统提示词相似度（主要方法，准确度高）
+    if let Some(system_prompt) = extract_system_prompt(request_body) {
+        if is_claude_code_prompt(&system_prompt) {
+            return true;
+        }
+    }
+
+    // 方法2: 检查 metadata.user_id 字段（辅助方法，作为备用）
     if let Some(metadata) = request_body.get("metadata") {
         if let Some(user_id) = metadata.get("user_id") {
             if let Some(user_id_str) = user_id.as_str() {
@@ -137,22 +205,116 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_system_prompt_string() {
+        let body = json!({
+            "system": "You are Claude Code, Anthropic's official CLI for Claude."
+        });
+        let prompt = extract_system_prompt(&body);
+        assert!(prompt.is_some());
+        assert_eq!(
+            prompt.unwrap(),
+            "You are Claude Code, Anthropic's official CLI for Claude."
+        );
+    }
+
+    #[test]
+    fn test_extract_system_prompt_array() {
+        let body = json!({
+            "system": [
+                {"type": "text", "text": "You are Claude Code,"},
+                {"type": "text", "text": "Anthropic's official CLI for Claude."}
+            ]
+        });
+        let prompt = extract_system_prompt(&body);
+        assert!(prompt.is_some());
+        assert_eq!(
+            prompt.unwrap(),
+            "You are Claude Code, Anthropic's official CLI for Claude."
+        );
+    }
+
+    #[test]
+    fn test_extract_system_prompt_none() {
+        let body = json!({
+            "model": "claude-3-5-sonnet-20241022"
+        });
+        let prompt = extract_system_prompt(&body);
+        assert!(prompt.is_none());
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_with_system_prompt() {
+        let body = json!({
+            "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+            "messages": []
+        });
+        assert!(
+            is_real_claude_code_request(&body),
+            "应该通过系统提示词相似度检测到 Claude Code"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_with_array_system() {
+        let body = json!({
+            "system": [
+                {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}
+            ],
+            "messages": []
+        });
+        assert!(
+            is_real_claude_code_request(&body),
+            "应该支持数组格式的 system 字段"
+        );
+    }
+
+    #[test]
     fn test_is_real_claude_code_request_with_user_id() {
         let body = json!({
             "metadata": {
                 "user_id": "user_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef_account__session_12345678-1234-1234-1234-123456789012"
             }
         });
-        assert!(is_real_claude_code_request(&body));
+        assert!(
+            is_real_claude_code_request(&body),
+            "应该通过 metadata.user_id 检测到 Claude Code"
+        );
     }
 
     #[test]
-    fn test_is_real_claude_code_request_without_markers() {
+    fn test_is_real_claude_code_request_with_agent_sdk_prompt() {
+        let body = json!({
+            "system": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
+            "messages": []
+        });
+        assert!(
+            is_real_claude_code_request(&body),
+            "应该识别 Agent SDK 提示词"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_custom_prompt() {
+        let body = json!({
+            "system": "You are a helpful assistant that answers questions.",
+            "messages": []
+        });
+        assert!(
+            !is_real_claude_code_request(&body),
+            "自定义提示词不应该被识别为 Claude Code"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_without_system() {
         let body = json!({
             "model": "claude-3-5-sonnet-20241022",
             "messages": []
         });
-        assert!(!is_real_claude_code_request(&body));
+        assert!(
+            !is_real_claude_code_request(&body),
+            "没有 system 字段的请求不应该被识别"
+        );
     }
 
     #[test]
