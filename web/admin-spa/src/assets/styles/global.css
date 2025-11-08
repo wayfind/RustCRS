@@ -69,11 +69,12 @@ textarea {
 
 body {
   font-family:
-    'Inter',
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     Roboto,
+    'Helvetica Neue',
+    Arial,
     sans-serif;
   background: linear-gradient(
     135deg,
