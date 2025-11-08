@@ -42,8 +42,8 @@ export default defineConfig({
 
   // 全局配置
   use: {
-    // 基础 URL - 指向 Vite 开发服务器（包含 /admin 前缀）
-    baseURL: process.env.BASE_URL || 'http://localhost:3001/admin',
+    // 基础 URL - 指向 Rust 后端提供的静态文件服务
+    baseURL: process.env.BASE_URL || 'http://localhost:8080/admin-next',
 
     // 截图设置
     screenshot: 'only-on-failure',
@@ -68,6 +68,13 @@ export default defineConfig({
 
   // 测试项目配置 - 多浏览器测试
   projects: [
+    // Firefox - 优先使用 Firefox 避免 Chromium 崩溃问题
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+
+    // Chromium - 在某些环境下可能崩溃
     {
       name: 'chromium',
       use: {
@@ -84,12 +91,6 @@ export default defineConfig({
       },
     },
 
-    // 可选：Firefox 测试
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-
     // 可选：移动端测试
     // {
     //   name: 'Mobile Chrome',
@@ -97,13 +98,15 @@ export default defineConfig({
     // },
   ],
 
-  // Web Server 配置 - 自动启动开发服务器
-  webServer: {
-    command: 'npm run dev',
-    port: 3001,
-    timeout: 120 * 1000,
-    reuseExistingServer: !process.env.CI,
-    stdout: 'ignore',
-    stderr: 'pipe',
-  },
+  // Web Server 配置 - Rust 后端需要手动启动
+  // Rust 后端会自动提供静态文件服务在 /admin-next 路径
+  // 确保在运行测试前先启动: cd rust && cargo run --release
+  // webServer: {
+  //   command: 'npm run dev',
+  //   port: 3001,
+  //   timeout: 120 * 1000,
+  //   reuseExistingServer: !process.env.CI,
+  //   stdout: 'ignore',
+  //   stderr: 'pipe',
+  // },
 });
