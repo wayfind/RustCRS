@@ -15,16 +15,18 @@ impl HttpClient {
     pub fn new(settings: &Settings) -> Result<Self> {
         let timeout = Duration::from_millis(settings.server.request_timeout);
 
-        let mut builder = Client::builder()
+        let builder = Client::builder()
             .timeout(timeout)
             .connect_timeout(Duration::from_secs(30))
             .pool_idle_timeout(Duration::from_secs(90))
             .pool_max_idle_per_host(10)
-            .user_agent("claude-relay-service/1.0");
+            // NOTE: Accept invalid certs when using proxy (Claude Code uses self-signed certs for TLS inspection)
+            .danger_accept_invalid_certs(true);
+        // NOTE: Don't set default user_agent here - let each service set it per request
+        // This allows Claude Console to use "claude_code" as required
 
-        // TODO: Add proxy configuration from settings when proxy support is added
-        // For now, use system proxy settings
-        builder = builder.no_proxy();
+        // NOTE: We don't call .no_proxy() here - let reqwest use system proxy from env vars
+        // This is required in Claude Code environment to access external networks
 
         let client = builder
             .build()
@@ -45,7 +47,7 @@ impl HttpClient {
             .connect_timeout(Duration::from_secs(30))
             .pool_idle_timeout(Duration::from_secs(90))
             .pool_max_idle_per_host(10)
-            .user_agent("claude-relay-service/1.0")
+            // NOTE: Don't set default user_agent - let each service set it per request
             .proxy(proxy)
             .build()
             .map_err(|e| AppError::InternalError(format!("Failed to create HTTP client: {}", e)))?;

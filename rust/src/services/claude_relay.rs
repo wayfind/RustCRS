@@ -286,10 +286,15 @@ impl ClaudeRelayService {
             .header("anthropic-version", &self.config.api_version)
             .header("x-api-key", access_token);
 
-        // Claude Console 需要特定的 User-Agent
-        if account.platform == Platform::ClaudeConsole {
-            request_builder = request_builder.header("User-Agent", "claude_code");
-        }
+        // 设置 User-Agent (Claude Console 需要特定的值)
+        let user_agent = if account.platform == Platform::ClaudeConsole {
+            debug!("Setting User-Agent to 'claude_code' for Claude Console");
+            "claude_code"  // Claude Console requires this exact User-Agent
+        } else {
+            debug!("Setting User-Agent to 'claude-relay-service/1.0' for platform: {:?}", account.platform);
+            "claude-relay-service/1.0"  // Default for other platforms
+        };
+        request_builder = request_builder.header("User-Agent", user_agent);
 
         let request_builder = request_builder.json(request_body);
 
@@ -305,7 +310,10 @@ impl ClaudeRelayService {
         )
         .await
         .context("Request timeout")?
-        .context("Failed to send request")?;
+        .map_err(|e| {
+            error!("HTTP request failed: {:?}", e);
+            AppError::InternalError(format!("Failed to send request: {}", e))
+        })?;
 
         let status_code = response.status().as_u16();
         let headers: Vec<(String, String)> = response
