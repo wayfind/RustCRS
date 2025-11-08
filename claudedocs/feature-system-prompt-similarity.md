@@ -80,6 +80,9 @@ normalize_text("Hello __PLACEHOLDER__ World")
 ### 4. 验证流程
 
 ```
+0. 验证 model 字段（与 Node.js 对齐）
+   └─ model 必须存在且为字符串，否则拒绝
+
 1. 提取系统提示词
    ├─ 字符串格式: system: "text"
    └─ 数组格式: system: [{"type": "text", "text": "..."}, ...]
@@ -165,8 +168,8 @@ if is_real_claude_code_request(&request_body) {
 |------|----------|------|
 | 批次2 | 7 | 模板管理完整工作流 |
 | 批次3 | 18 | 模板匹配所有场景 |
-| 批次4 | 18 | claude_code_headers 集成 |
-| **总计** | **43** | **端到端验证** |
+| 批次4 | 20 | claude_code_headers 集成（含 model 字段验证） |
+| **总计** | **45** | **端到端验证** |
 
 ### 测试场景
 
@@ -316,8 +319,9 @@ claudedocs/
 - ✅ **准确性**: 从简单启发式 → 精确算法匹配
 - ✅ **覆盖性**: 支持 5 种 Claude Code 提示词变体
 - ✅ **性能**: < 1ms 验证延迟，对用户请求无感知
-- ✅ **测试**: 70个单元测试 + 43个集成测试全部通过
+- ✅ **测试**: 63个单元测试 + 45个集成测试全部通过（总计 108）
 - ✅ **文档**: 完整的设计文档、API 文档、使用指南
+- ✅ **Node.js 对齐**: 完全对齐 Node.js 核心验证逻辑（含 model 字段检查）
 
 该功能已合并到 `claude_code_headers` 模块，作为 `is_real_claude_code_request()` 的核心验证逻辑，在生产环境中稳定运行。
 

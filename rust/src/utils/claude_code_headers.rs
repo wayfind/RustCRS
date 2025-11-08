@@ -126,12 +126,19 @@ fn extract_system_prompt(request_body: &serde_json::Value) -> Option<String> {
 /// use serde_json::json;
 ///
 /// let body = json!({
+///     "model": "claude-3-5-sonnet-20241022",
 ///     "system": "You are Claude Code, Anthropic's official CLI for Claude.",
 ///     "messages": []
 /// });
 /// assert!(is_real_claude_code_request(&body));
 /// ```
 pub fn is_real_claude_code_request(request_body: &serde_json::Value) -> bool {
+    // 0. 检查 model 字段必须存在且为字符串（与 Node.js 对齐）
+    // Node.js: if (!model) { return false }
+    if request_body.get("model").and_then(|m| m.as_str()).is_none() {
+        return false;
+    }
+
     // 方法1: 检查系统提示词相似度（主要方法，准确度高）
     if let Some(system_prompt) = extract_system_prompt(request_body) {
         if is_claude_code_prompt(&system_prompt) {
@@ -245,6 +252,7 @@ mod tests {
     #[test]
     fn test_is_real_claude_code_request_with_system_prompt() {
         let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
             "system": "You are Claude Code, Anthropic's official CLI for Claude.",
             "messages": []
         });
@@ -257,6 +265,7 @@ mod tests {
     #[test]
     fn test_is_real_claude_code_request_with_array_system() {
         let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
             "system": [
                 {"type": "text", "text": "You are Claude Code, Anthropic's official CLI for Claude."}
             ],
@@ -271,6 +280,7 @@ mod tests {
     #[test]
     fn test_is_real_claude_code_request_with_user_id() {
         let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
             "metadata": {
                 "user_id": "user_1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef_account__session_12345678-1234-1234-1234-123456789012"
             }
@@ -284,6 +294,7 @@ mod tests {
     #[test]
     fn test_is_real_claude_code_request_with_agent_sdk_prompt() {
         let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
             "system": "You are a Claude agent, built on Anthropic's Claude Agent SDK.",
             "messages": []
         });
@@ -296,6 +307,7 @@ mod tests {
     #[test]
     fn test_is_real_claude_code_request_custom_prompt() {
         let body = json!({
+            "model": "claude-3-5-sonnet-20241022",
             "system": "You are a helpful assistant that answers questions.",
             "messages": []
         });
@@ -314,6 +326,31 @@ mod tests {
         assert!(
             !is_real_claude_code_request(&body),
             "没有 system 字段的请求不应该被识别"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_without_model() {
+        let body = json!({
+            "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+            "messages": []
+        });
+        assert!(
+            !is_real_claude_code_request(&body),
+            "没有 model 字段的请求不应该被识别（与 Node.js 对齐）"
+        );
+    }
+
+    #[test]
+    fn test_is_real_claude_code_request_with_non_string_model() {
+        let body = json!({
+            "model": 123,
+            "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+            "messages": []
+        });
+        assert!(
+            !is_real_claude_code_request(&body),
+            "model 字段不是字符串的请求不应该被识别"
         );
     }
 

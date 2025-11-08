@@ -315,3 +315,35 @@ fn test_batch4_real_world_scenario_custom() {
     );
     println!("✓ 真实自定义场景正确拒绝");
 }
+
+#[test]
+fn test_batch4_missing_model_field() {
+    // 即使有 Claude Code 系统提示词，缺少 model 字段也应该拒绝
+    // 这与 Node.js 实现对齐
+    let body = json!({
+        "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+        "messages": []
+    });
+
+    assert!(
+        !is_real_claude_code_request(&body),
+        "缺少 model 字段应该拒绝（与 Node.js 对齐）"
+    );
+    println!("✓ 正确拒绝缺少 model 字段的请求");
+}
+
+#[test]
+fn test_batch4_non_string_model() {
+    // model 字段必须是字符串
+    let body = json!({
+        "model": 123,
+        "system": "You are Claude Code, Anthropic's official CLI for Claude.",
+        "messages": []
+    });
+
+    assert!(
+        !is_real_claude_code_request(&body),
+        "model 不是字符串应该拒绝"
+    );
+    println!("✓ 正确拒绝 model 字段为非字符串的请求");
+}
