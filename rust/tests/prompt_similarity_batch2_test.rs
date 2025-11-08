@@ -101,7 +101,9 @@ fn test_batch2_specific_templates() {
 
     // 5. Compact模板
     let compact = get_template_by_id("claude_code_compact").unwrap();
-    assert!(compact.text.contains("helpful AI assistant"));
+    assert!(compact.text.contains("Claude"));
+    assert!(compact.text.contains("summarizing conversations"));
+    assert!(compact.text.contains("Claude Code sessions"));
     println!("✓ Compact模板验证通过");
 }
 
