@@ -194,23 +194,28 @@ echo ""
 
 log_info "Creating test API key..."
 
-# Get all account IDs from Redis (fallback if injection failed)
+# Get first account ID for binding (backend expects single account ID, not array)
 if [ ${#CLAUDE_ACCOUNT_IDS[@]} -eq 0 ]; then
     log_warning "No accounts created, creating API key without account binding"
-    ACCOUNT_BINDING=""
+    API_KEY_PAYLOAD="{
+        \"name\": \"E2E-Test-Key-$(date +%Y%m%d-%H%M%S)\",
+        \"permissions\": \"all\"
+    }"
 else
-    # Convert array to JSON array string
-    ACCOUNT_BINDING=$(printf '%s\n' "${CLAUDE_ACCOUNT_IDS[@]}" | jq -R . | jq -s -c .)
+    # Use first account ID
+    FIRST_ACCOUNT_ID="${CLAUDE_ACCOUNT_IDS[0]}"
+    log_info "Binding API key to account: ${FIRST_ACCOUNT_ID}"
+    API_KEY_PAYLOAD="{
+        \"name\": \"E2E-Test-Key-$(date +%Y%m%d-%H%M%S)\",
+        \"permissions\": \"all\",
+        \"claudeConsoleAccountId\": \"${FIRST_ACCOUNT_ID}\"
+    }"
 fi
 
 API_KEY_RESPONSE=$(curl -s -X POST "${BASE_URL}/admin/api-keys" \
     -H "Authorization: Bearer ${ADMIN_TOKEN}" \
     -H "Content-Type: application/json" \
-    -d "{
-        \"name\": \"E2E-Test-Key-$(date +%Y%m%d-%H%M%S)\",
-        \"permissions\": \"all\",
-        \"claudeAccountIds\": ${ACCOUNT_BINDING:-[]}
-    }")
+    -d "${API_KEY_PAYLOAD}")
 
 TEST_API_KEY=$(echo "${API_KEY_RESPONSE}" | jq -r '.data.key')
 TEST_API_KEY_ID=$(echo "${API_KEY_RESPONSE}" | jq -r '.data.id')

@@ -130,32 +130,40 @@ else
 fi
 
 # 检查是否需要通过本地后端还是直接测试
-read -p "是否通过本地 Rust 后端测试？(Y/n): " USE_LOCAL
-USE_LOCAL=${USE_LOCAL:-Y}
-
-if [[ "$USE_LOCAL" =~ ^[Yy]$ ]]; then
-    echo "🔄 将通过本地 Rust 后端进行测试"
+# 自动使用 TEST_API_KEY 如果可用，否则提示用户
+if [ -n "${TEST_API_KEY}" ] && [ "${TEST_API_KEY}" != "<existing-key-value-unavailable>" ]; then
+    echo "🔄 将通过本地 Rust 后端进行测试（自动使用 TEST_API_KEY）"
     ENDPOINT=$LOCAL_ENDPOINT
-
-    # 检查是否已有绑定此 session_token 的 API Key
-    echo "🔍 检查现有 API Key..."
-    # 这里需要从 Redis 或管理界面创建 API Key
-    read -p "请输入测试用 API Key (如果已创建): " EXISTING_API_KEY
-
-    if [ -z "$EXISTING_API_KEY" ]; then
-        echo "⚠️  需要先创建 API Key 并绑定到 Claude Console 账户"
-        echo "   1. 访问 http://localhost:8080/admin-next"
-        echo "   2. 添加 Claude Console 账户（使用上述 session_token）"
-        echo "   3. 创建 API Key 并绑定到该账户"
-        echo "   4. 重新运行此脚本并输入 API Key"
-        exit 1
-    fi
-
-    AUTH_HEADER="Authorization: Bearer $EXISTING_API_KEY"
+    AUTH_HEADER="Authorization: Bearer $TEST_API_KEY"
 else
-    echo "🌐 将直接测试 Claude Console 端点"
-    ENDPOINT="$ANTHROPIC_BASE_URL/messages"
-    AUTH_HEADER="x-api-key: $ANTHROPIC_AUTH_TOKEN"
+    # 仅在 TEST_API_KEY 不可用时才交互式询问
+    read -p "是否通过本地 Rust 后端测试？(Y/n): " USE_LOCAL
+    USE_LOCAL=${USE_LOCAL:-Y}
+
+    if [[ "$USE_LOCAL" =~ ^[Yy]$ ]]; then
+        echo "🔄 将通过本地 Rust 后端进行测试"
+        ENDPOINT=$LOCAL_ENDPOINT
+
+        # 检查是否已有绑定此 session_token 的 API Key
+        echo "🔍 检查现有 API Key..."
+        # 这里需要从 Redis 或管理界面创建 API Key
+        read -p "请输入测试用 API Key (如果已创建): " EXISTING_API_KEY
+
+        if [ -z "$EXISTING_API_KEY" ]; then
+            echo "⚠️  需要先创建 API Key 并绑定到 Claude Console 账户"
+            echo "   1. 访问 http://localhost:8080/admin-next"
+            echo "   2. 添加 Claude Console 账户（使用上述 session_token）"
+            echo "   3. 创建 API Key 并绑定到该账户"
+            echo "   4. 重新运行此脚本并输入 API Key"
+            exit 1
+        fi
+
+        AUTH_HEADER="Authorization: Bearer $EXISTING_API_KEY"
+    else
+        echo "🌐 将直接测试 Claude Console 端点"
+        ENDPOINT="$ANTHROPIC_BASE_URL/messages"
+        AUTH_HEADER="x-api-key: $ANTHROPIC_AUTH_TOKEN"
+    fi
 fi
 
 echo ""
