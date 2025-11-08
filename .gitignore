@@ -259,3 +259,7 @@ web/apiStats/
 # Admin SPA build files
 web/admin-spa/dist/
 *.tmp
+
+# Test credentials (NEVER commit real credentials)
+tests/fixtures/credentials.json
+tests/.test-credentials
