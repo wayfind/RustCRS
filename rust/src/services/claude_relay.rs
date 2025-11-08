@@ -647,10 +647,13 @@ impl ClaudeRelayService {
             .header("anthropic-version", &config.api_version)
             .header("x-api-key", access_token);
 
-        // Claude Console 需要特定的 User-Agent
-        if account.platform == Platform::ClaudeConsole {
-            request_builder = request_builder.header("User-Agent", "claude_code");
-        }
+        // 设置 User-Agent (Claude Console 需要特定的值，必须为 "claude_code")
+        let user_agent = if account.platform == Platform::ClaudeConsole {
+            "claude_code"  // Claude Console enforces allowedClients=["claude_code"]
+        } else {
+            "claude-relay-service/1.0"  // Default for other platforms
+        };
+        request_builder = request_builder.header("User-Agent", user_agent);
 
         let response = timeout(
             Duration::from_secs(config.timeout_seconds),
