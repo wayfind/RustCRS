@@ -8,8 +8,7 @@
 ## 🎯 目标
 
 本指南帮助你在本地环境完整运行 Claude Relay Service，包括：
-- ✅ Rust 后端（端口 8080）
-- ✅ Vue 3 前端管理界面（端口 3001）
+- ✅ Rust 后端 + Vue 3 前端（统一端口 8080）
 - ✅ Redis 数据库（端口 6379）
 - ✅ 配置你的 Claude/Gemini/OpenAI API Keys
 
@@ -193,16 +192,16 @@ cd web/admin-spa/
 # 首次运行需要安装依赖
 npm install
 
-# 启动开发服务器
-npm run dev
+# 构建前端静态资源
+npm run build
 
-# Vite 会自动打开浏览器，访问：
-# http://localhost:3001
+# 前端资源将输出到 dist/ 目录，由 Rust 后端提供服务
 ```
 
 **前端配置说明**：
-- 前端默认代理到 `http://localhost:8080`（Rust 后端）
-- 如需修改代理目标：`VITE_API_TARGET=http://localhost:8080 npm run dev`
+- 前端编译后的静态文件位于 `web/admin-spa/dist/`
+- Rust 后端在端口 8080 同时提供 API 和静态文件服务
+- 访问地址：`http://localhost:8080` 或 `http://localhost:8080/admin-next`
 
 ---
 
@@ -230,10 +229,11 @@ curl -X POST http://localhost:8080/api/v1/messages \
 
 ### 4.2 验证前端界面
 
-1. 打开浏览器访问 `http://localhost:3001`
+1. 打开浏览器访问 `http://localhost:8080`（根路径自动跳转到 `/admin-next`）
 2. 应该看到 Claude Relay Service 管理界面
 3. 尝试登录（如果已配置管理员账户）
 4. 检查仪表板、账户管理、API Key 管理等功能
+5. 打开浏览器开发者工具，检查控制台是否有错误
 
 ### 4.3 验证 Redis 连接
 
@@ -289,8 +289,7 @@ redis-cli ping
 **解决方案**：
 ```bash
 # 检查端口占用
-lsof -i :8080  # Rust 后端
-lsof -i :3001  # 前端
+lsof -i :8080  # Rust 后端（包含前端）
 lsof -i :6379  # Redis
 
 # 杀死占用进程
@@ -300,22 +299,25 @@ kill -9 <PID>
 export CRS_SERVER__PORT=8081  # Rust 后端换端口
 ```
 
-### 问题 4：前端无法连接后端
+### 问题 4：前端界面无法加载
 
-**错误**: 前端请求返回 `ERR_CONNECTION_REFUSED`
+**错误**: 访问 `http://localhost:8080` 显示 404 或空白页面
 
 **解决方案**：
 ```bash
 # 1. 确认 Rust 后端正在运行
 curl http://localhost:8080/health
 
-# 2. 检查前端代理配置
-cat web/admin-spa/vite.config.js | grep apiTarget
-# 应该是 http://localhost:8080
+# 2. 检查前端是否已构建
+ls -la web/admin-spa/dist/
 
-# 3. 重启前端
+# 3. 如果 dist/ 目录为空，重新构建前端
 cd web/admin-spa/
-npm run dev
+npm run build
+
+# 4. 重启 Rust 后端
+cd ../../rust/
+cargo run
 ```
 
 ### 问题 5：编译错误
@@ -462,8 +464,7 @@ GET api_key:some_id
 
 如果所有步骤都成功，你现在应该有：
 
-- ✅ Rust 后端运行在 `http://localhost:8080`
-- ✅ 前端界面运行在 `http://localhost:3001`
+- ✅ Rust 后端 + 前端统一运行在 `http://localhost:8080`
 - ✅ Redis 运行在 `localhost:6379`
 - ✅ 完整的本地调试环境
 

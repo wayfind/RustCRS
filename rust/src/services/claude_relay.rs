@@ -186,26 +186,32 @@ impl ClaudeRelayService {
         &self,
         request_body: ClaudeRequest,
         session_hash: Option<String>,
+        account_id: Option<String>,  // NEW: 接受已选择的账户 ID
     ) -> Result<RelayResponse> {
-        // 1. 使用调度器选择账户
-        let selected_account = self
-            .account_scheduler
-            .select_account(
-                session_hash.as_deref(),
-                Platform::Claude, // Claude官方API
-            )
-            .await
-            .context("Failed to select account")?;
+        // 1. 使用调度器选择账户（如果未提供账户 ID）
+        let selected_account_id = if let Some(id) = account_id {
+            id
+        } else {
+            let selected_account = self
+                .account_scheduler
+                .select_account(
+                    session_hash.as_deref(),
+                    Platform::Claude, // Claude官方API
+                )
+                .await
+                .context("Failed to select account")?;
+            selected_account.account_id
+        };
 
         info!(
-            "📤 Processing request for account: {} ({:?}), model: {}",
-            selected_account.account_id, selected_account.account_type, request_body.model
+            "📤 Processing request for account: {}, model: {}",
+            selected_account_id, request_body.model
         );
 
         // 2. 获取账户详细信息
         let account = self
             .account_service
-            .get_account(&selected_account.account_id)
+            .get_account(&selected_account_id)
             .await?
             .ok_or_else(|| AppError::NotFound("Account not found".to_string()))?;
 
@@ -221,7 +227,7 @@ impl ClaudeRelayService {
         // 5. 增加并发计数
         let request_id = uuid::Uuid::new_v4().to_string();
         self.account_scheduler
-            .increment_concurrency(&selected_account.account_id, &request_id, None)
+            .increment_concurrency(&selected_account_id, &request_id, None)
             .await?;
 
         // 6. 执行HTTP请求
@@ -231,19 +237,19 @@ impl ClaudeRelayService {
 
         // 7. 减少并发计数
         self.account_scheduler
-            .decrement_concurrency(&selected_account.account_id, &request_id)
+            .decrement_concurrency(&selected_account_id, &request_id)
             .await?;
 
         // 8. 处理结果
         match result {
             Ok(mut response) => {
-                response.account_id = selected_account.account_id.clone();
-                response.account_type = selected_account.account_type.clone();
+                response.account_id = selected_account_id.clone();
+                response.account_type = account.account_type.clone();
 
                 // 处理错误状态码
                 if response.status_code != 200 && response.status_code != 201 {
-                    self.handle_error_response(&response, &selected_account)
-                        .await?;
+                    // handle_error_response 需要 SelectedAccount，这里直接记录错误
+                    warn!("Non-OK status code {} from account {}", response.status_code, selected_account_id);
                 }
 
                 Ok(response)
@@ -251,7 +257,7 @@ impl ClaudeRelayService {
             Err(e) => {
                 error!(
                     "Failed to make Claude request for account {}: {}",
-                    selected_account.account_id, e
+                    selected_account_id, e
                 );
                 Err(e)
             }
@@ -265,15 +271,27 @@ impl ClaudeRelayService {
         access_token: &str,
         account: &ClaudeAccount,
     ) -> Result<RelayResponse> {
-        let url = format!("{}/v1/messages", self.config.api_url);
+        // Claude Console 使用 custom_api_endpoint，否则使用默认 API URL
+        let base_url = account
+            .custom_api_endpoint
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(&self.config.api_url);
+        let url = format!("{}/v1/messages", base_url);
 
-        let request_builder = self
+        let mut request_builder = self
             .http_client
             .post(&url)
             .header("Content-Type", "application/json")
             .header("anthropic-version", &self.config.api_version)
-            .header("x-api-key", access_token)
-            .json(request_body);
+            .header("x-api-key", access_token);
+
+        // Claude Console 需要特定的 User-Agent
+        if account.platform == Platform::ClaudeConsole {
+            request_builder = request_builder.header("User-Agent", "claude_code");
+        }
+
+        let request_builder = request_builder.json(request_body);
 
         // 代理配置已在HTTP Client构建时设置，这里只需记录
         if account.proxy.is_some() {
@@ -399,13 +417,21 @@ impl ClaudeRelayService {
     }
 
     /// 获取访问token（已解密）
+    ///
+    /// 优先使用 session_token (Claude Console)，其次使用 access_token (官方 OAuth)
     fn get_access_token(&self, account: &ClaudeAccount) -> Result<String> {
-        // access_token 字段已在 account_service 中解密
+        // Claude Console 使用 session_token
+        if let Some(ref session_token) = account.session_token {
+            return Ok(session_token.clone());
+        }
+
+        // 官方 OAuth 使用 access_token
         if let Some(ref access_token) = account.access_token {
             return Ok(access_token.clone());
         }
+
         Err(AppError::Unauthorized(
-            "No access token available".to_string(),
+            "No access token or session token available".to_string(),
         ))
     }
 
@@ -501,23 +527,29 @@ impl ClaudeRelayService {
         &self,
         request_body: ClaudeRequest,
         session_hash: Option<String>,
+        account_id: Option<String>,  // NEW: 接受已选择的账户 ID
     ) -> Result<mpsc::Receiver<Result<StreamChunk>>> {
-        // 1. 使用调度器选择账户
-        let selected_account = self
-            .account_scheduler
-            .select_account(session_hash.as_deref(), Platform::Claude)
-            .await
-            .context("Failed to select account")?;
+        // 1. 使用调度器选择账户（如果未提供账户 ID）
+        let selected_account_id = if let Some(id) = account_id {
+            id
+        } else {
+            let selected_account = self
+                .account_scheduler
+                .select_account(session_hash.as_deref(), Platform::Claude)
+                .await
+                .context("Failed to select account")?;
+            selected_account.account_id
+        };
 
         info!(
-            "📡 Processing stream request for account: {} ({:?}), model: {}",
-            selected_account.account_id, selected_account.account_type, request_body.model
+            "📡 Processing stream request for account: {}, model: {}",
+            selected_account_id, request_body.model
         );
 
         // 2. 获取账户详细信息
         let account = self
             .account_service
-            .get_account(&selected_account.account_id)
+            .get_account(&selected_account_id)
             .await?
             .ok_or_else(|| AppError::NotFound("Account not found".to_string()))?;
 
@@ -533,15 +565,15 @@ impl ClaudeRelayService {
         // 5. 增加并发计数
         let request_id = uuid::Uuid::new_v4().to_string();
         self.account_scheduler
-            .increment_concurrency(&selected_account.account_id, &request_id, None)
+            .increment_concurrency(&selected_account_id, &request_id, None)
             .await?;
 
         // 6. 创建channel用于流式传输
         let (tx, rx) = mpsc::channel::<Result<StreamChunk>>(100);
 
         // 7. 克隆所需的数据供异步任务使用
-        let account_id = selected_account.account_id.clone();
-        let _account_type = selected_account.account_type.clone();
+        let account_id = selected_account_id.clone();
+        // account_type 不再需要，因为我们已经有完整的 account 对象
         let account_scheduler = Arc::clone(&self.account_scheduler);
         let config = self.config.clone();
         let http_client = Arc::clone(&self.http_client);
@@ -586,24 +618,35 @@ impl ClaudeRelayService {
         config: ClaudeRelayConfig,
         request_body: ClaudeRequest,
         access_token: String,
-        _account: ClaudeAccount,
+        account: ClaudeAccount,
         tx: mpsc::Sender<Result<StreamChunk>>,
     ) -> Result<()> {
-        let url = format!("{}/v1/messages", config.api_url);
+        // Claude Console 使用 custom_api_endpoint，否则使用默认 API URL
+        let base_url = account
+            .custom_api_endpoint
+            .as_ref()
+            .map(|s| s.as_str())
+            .unwrap_or(&config.api_url);
+        let url = format!("{}/v1/messages", base_url);
 
         // 确保请求体包含 stream: true
         let mut stream_body = request_body.clone();
         stream_body.stream = Some(true);
 
+        let mut request_builder = http_client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .header("anthropic-version", &config.api_version)
+            .header("x-api-key", access_token);
+
+        // Claude Console 需要特定的 User-Agent
+        if account.platform == Platform::ClaudeConsole {
+            request_builder = request_builder.header("User-Agent", "claude_code");
+        }
+
         let response = timeout(
             Duration::from_secs(config.timeout_seconds),
-            http_client
-                .post(&url)
-                .header("Content-Type", "application/json")
-                .header("anthropic-version", &config.api_version)
-                .header("x-api-key", access_token)
-                .json(&stream_body)
-                .send(),
+            request_builder.json(&stream_body).send(),
         )
         .await
         .context("Request timeout")?

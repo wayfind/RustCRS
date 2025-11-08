@@ -1,0 +1,46 @@
+{
+  "version": "1.0.0",
+  "createdAt": "2025-01-11T00:00:00Z",
+  "description": "Base test data for end-to-end (E2E) tests - DO NOT COMMIT",
+  "comments": {
+    "usage": "Copy this file to test-base-data.json and fill in real credentials",
+    "security": "test-base-data.json is gitignored - never commit real credentials",
+    "session_token": "Get from Claude Console browser cookies (sessionKey)",
+    "custom_api_endpoint": "Usually https://us3.pincc.ai/api or similar reverse proxy"
+  },
+  "accounts": {
+    "claude_console": [
+      {
+        "id": "test-account-001",
+        "name": "E2E-Test-Claude-Console-001",
+        "platform": "claudeconsole",
+        "session_token": "YOUR_SESSION_TOKEN_HERE",
+        "custom_api_endpoint": "https://us3.pincc.ai/api",
+        "active": true,
+        "priority": 50,
+        "schedulable": true,
+        "concurrency_limit": 3,
+        "use_unified_user_agent": false,
+        "use_unified_client_id": false,
+        "auto_stop_on_warning": false,
+        "model_whitelist": [],
+        "model_blacklist": []
+      }
+    ]
+  },
+  "api_keys": {
+    "test_keys": [
+      {
+        "id": "test-key-001",
+        "name": "E2E-Test-Key-001",
+        "key": "cr_test_e2e_regression_001",
+        "permissions": "all",
+        "claude_console_account_ids": ["test-account-001"],
+        "rate_limit": null,
+        "monthly_limit": null,
+        "allowed_user_agents": [],
+        "user_agent_blacklist": []
+      }
+    ]
+  }
+}

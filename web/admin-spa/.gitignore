@@ -14,6 +14,10 @@ node_modules
 dist
 dist-ssr
 
+# Playwright test reports
+playwright-report
+test-results
+
 # Local env files
 !.env.production
 *.local

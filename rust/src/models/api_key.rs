@@ -92,39 +92,43 @@ pub struct ApiKey {
     pub icon: Option<String>,
 
     /// 创建时间
+    #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
 
     /// 更新时间
+    #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
 
     /// 过期时间
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "expiresAt")]
     pub expires_at: Option<DateTime<Utc>>,
 
     /// 激活时间 (首次使用时间)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "activatedAt")]
     pub activated_at: Option<DateTime<Utc>>,
 
     /// 最后使用时间
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "lastUsedAt")]
     pub last_used_at: Option<DateTime<Utc>>,
 
     /// 是否激活
+    #[serde(rename = "isActive")]
     pub is_active: bool,
 
     /// 是否已删除
+    #[serde(rename = "isDeleted")]
     pub is_deleted: bool,
 
     /// 删除时间
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "deletedAt")]
     pub deleted_at: Option<DateTime<Utc>>,
 
     /// 删除者
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "deletedBy")]
     pub deleted_by: Option<String>,
 
     /// 删除者类型
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none", rename = "deletedByType")]
     pub deleted_by_type: Option<String>,
 
     /// 权限
@@ -182,12 +186,19 @@ pub struct ApiKey {
     pub activation_unit: ActivationUnit,
 
     /// 绑定的账户 ID
+    #[serde(rename = "claudeAccountId")]
     pub claude_account_id: Option<String>,
+    #[serde(rename = "claudeConsoleAccountId")]
     pub claude_console_account_id: Option<String>,
+    #[serde(rename = "geminiAccountId")]
     pub gemini_account_id: Option<String>,
+    #[serde(rename = "openaiAccountId")]
     pub openai_account_id: Option<String>,
+    #[serde(rename = "azureOpenaiAccountId")]
     pub azure_openai_account_id: Option<String>,
+    #[serde(rename = "bedrockAccountId")]
     pub bedrock_account_id: Option<String>,
+    #[serde(rename = "droidAccountId")]
     pub droid_account_id: Option<String>,
 
     /// 用户 ID (如果启用用户管理)

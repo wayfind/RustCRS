@@ -1,4 +1,4 @@
-# Claude Relay Service (Rust 版本)
+# Rust CRS(Rust Claude Relay Service)
 
 > **高性能 AI API 中转服务** - 支持 Claude、Gemini、OpenAI 等多平台，提供完整的多账户管理、认证和监控功能。
 
@@ -18,7 +18,7 @@
 - 🔐 **企业级安全** - AES-256 加密、JWT 认证、API Key 管理
 - 🌐 **多平台支持** - Claude (官方/Console)、Gemini、OpenAI、AWS Bedrock、Azure OpenAI
 - 📊 **实时监控** - 使用统计、成本追踪、性能指标、健康检查
-- 🎨 **现代化管理界面** - Vue 3 + Element Plus SPA
+- 🎨 **现代化管理界面** - Vue 3 + Element Plus SPA，由 Rust 后端提供静态文件服务
 - 🐳 **Docker 部署** - 多阶段构建、体积优化 (~50MB)
 
 ---
@@ -56,7 +56,8 @@ npm install
 npm run dev
 ```
 
-访问: **http://localhost:3001** (前端) | **http://localhost:8080** (API)
+访问: **http://localhost:8080** (Web 管理界面 + API，根路径自动跳转到 `/admin-next`)
+开发模式可单独访问: **http://localhost:3001** (Vite 开发服务器)
 
 ### Docker 部署 (推荐)
 

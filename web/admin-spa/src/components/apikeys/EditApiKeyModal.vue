@@ -1011,6 +1011,7 @@ const refreshAccounts = async () => {
     const [
       claudeData,
       claudeConsoleData,
+      ccrData,
       geminiData,
       openaiData,
       openaiResponsesData,
@@ -1020,6 +1021,7 @@ const refreshAccounts = async () => {
     ] = await Promise.all([
       apiClient.get('/admin/claude-accounts'),
       apiClient.get('/admin/claude-console-accounts'),
+      apiClient.get('/admin/ccr-accounts'),
       apiClient.get('/admin/gemini-accounts'),
       apiClient.get('/admin/openai-accounts'),
       apiClient.get('/admin/openai-responses-accounts'),
@@ -1028,7 +1030,7 @@ const refreshAccounts = async () => {
       apiClient.get('/admin/account-groups')
     ])
 
-    // 合并Claude OAuth账户和Claude Console账户
+    // 合并Claude OAuth账户、Claude Console账户和CCR账户
     const claudeAccounts = []
 
     if (claudeData.success) {
@@ -1046,6 +1048,17 @@ const refreshAccounts = async () => {
         claudeAccounts.push({
           ...account,
           platform: 'claude-console',
+          isDedicated: account.accountType === 'dedicated' // 保留以便向后兼容
+        })
+      })
+    }
+
+    // 添加 CCR (Claude Code Route) 账户
+    if (ccrData.success) {
+      ccrData.data?.forEach((account) => {
+        claudeAccounts.push({
+          ...account,
+          platform: 'ccr',
           isDedicated: account.accountType === 'dedicated' // 保留以便向后兼容
         })
       })

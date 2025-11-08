@@ -136,6 +136,12 @@ pub struct ClaudeAccount {
     /// 刷新令牌（加密存储）
     #[serde(skip_serializing_if = "Option::is_none", rename = "refreshToken")]
     pub refresh_token: Option<String>,
+    /// 会话令牌（Claude Console 使用，加密存储）
+    #[serde(skip_serializing_if = "Option::is_none", rename = "session_token")]
+    pub session_token: Option<String>,
+    /// 自定义 API 端点（Claude Console 使用）
+    #[serde(skip_serializing_if = "Option::is_none", rename = "custom_api_endpoint")]
+    pub custom_api_endpoint: Option<String>,
     /// 令牌过期时间（Unix 时间戳毫秒字符串）
     #[serde(skip_serializing_if = "Option::is_none", rename = "expiresAt")]
     pub expires_at: Option<String>,

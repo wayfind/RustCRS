@@ -336,11 +336,31 @@ impl ApiKeyService {
     /// # 返回
     ///
     /// 返回更新后的 ApiKey 对象
+    #[allow(clippy::too_many_arguments)]
     pub async fn update_key(
         &self,
         key_id: &str,
         name: Option<String>,
         is_active: Option<bool>,
+        account_id: Option<String>,
+        claude_account_id: Option<Option<String>>,
+        claude_console_account_id: Option<Option<String>>,
+        gemini_account_id: Option<Option<String>>,
+        openai_account_id: Option<Option<String>>,
+        bedrock_account_id: Option<Option<String>>,
+        droid_account_id: Option<Option<String>>,
+        rate_limit_window: Option<i32>,
+        rate_limit_requests: Option<i32>,
+        rate_limit_cost: Option<f64>,
+        concurrency_limit: Option<i32>,
+        daily_cost_limit: Option<f64>,
+        total_cost_limit: Option<f64>,
+        weekly_opus_cost_limit: Option<f64>,
+        tags: Option<Vec<String>>,
+        enable_model_restriction: Option<bool>,
+        restricted_models: Option<Vec<String>>,
+        enable_client_restriction: Option<bool>,
+        allowed_clients: Option<Vec<String>>,
     ) -> Result<ApiKey> {
         // 获取现有 Key
         let mut api_key = self.get_key(key_id).await?;
@@ -359,6 +379,88 @@ impl ApiKeyService {
 
         if let Some(new_is_active) = is_active {
             api_key.is_active = new_is_active;
+        }
+
+        // 旧的 account_id 参数兼容性处理（保留向后兼容）
+        if let Some(new_account_id) = account_id {
+            api_key.claude_console_account_id = Some(new_account_id);
+        }
+
+        // 新的账户绑定字段
+        if let Some(new_claude_account_id) = claude_account_id {
+            api_key.claude_account_id = new_claude_account_id;
+        }
+
+        if let Some(new_claude_console_account_id) = claude_console_account_id {
+            api_key.claude_console_account_id = new_claude_console_account_id;
+        }
+
+        if let Some(new_gemini_account_id) = gemini_account_id {
+            api_key.gemini_account_id = new_gemini_account_id;
+        }
+
+        if let Some(new_openai_account_id) = openai_account_id {
+            api_key.openai_account_id = new_openai_account_id;
+        }
+
+        if let Some(new_bedrock_account_id) = bedrock_account_id {
+            api_key.bedrock_account_id = new_bedrock_account_id;
+        }
+
+        if let Some(new_droid_account_id) = droid_account_id {
+            api_key.droid_account_id = new_droid_account_id;
+        }
+
+        // 限制字段
+        if let Some(window) = rate_limit_window {
+            api_key.rate_limit_window = Some(window as i64);
+        }
+
+        if let Some(requests) = rate_limit_requests {
+            api_key.rate_limit_requests = Some(requests as i64);
+        }
+
+        if let Some(cost) = rate_limit_cost {
+            api_key.rate_limit_cost = Some(cost);
+        }
+
+        if let Some(limit) = concurrency_limit {
+            api_key.concurrency_limit = limit as i64;
+        }
+
+        if let Some(limit) = daily_cost_limit {
+            api_key.daily_cost_limit = limit;
+        }
+
+        if let Some(limit) = total_cost_limit {
+            api_key.total_cost_limit = limit;
+        }
+
+        if let Some(limit) = weekly_opus_cost_limit {
+            api_key.weekly_opus_cost_limit = limit;
+        }
+
+        // 标签
+        if let Some(new_tags) = tags {
+            api_key.tags = new_tags;
+        }
+
+        // 模型限制
+        if let Some(enabled) = enable_model_restriction {
+            api_key.enable_model_restriction = enabled;
+        }
+
+        if let Some(models) = restricted_models {
+            api_key.restricted_models = models;
+        }
+
+        // 客户端限制
+        if let Some(enabled) = enable_client_restriction {
+            api_key.enable_client_restriction = enabled;
+        }
+
+        if let Some(clients) = allowed_clients {
+            api_key.allowed_clients = clients;
         }
 
         // 更新时间戳

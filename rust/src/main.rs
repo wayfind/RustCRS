@@ -1,7 +1,11 @@
 use anyhow::Result;
-use axum::{routing::get, Router};
+use axum::{
+    response::Redirect,
+    routing::{get, get_service},
+    Router,
+};
 use std::{path::PathBuf, sync::Arc};
-use tower_http::services::ServeDir;
+use tower_http::services::{ServeDir, ServeFile};
 use tracing::{error, info};
 
 use claude_relay::routes::{
@@ -196,27 +200,59 @@ async fn main() -> Result<()> {
         redis: redis_arc,
         settings: settings_arc,
         account_service,
-        api_key_service,
+        api_key_service: api_key_service.clone(),
         scheduler,
         unified_openai_scheduler,
     };
 
     // Setup static file serving for Vue SPA
-    let static_dir = PathBuf::from("../web/admin-spa/dist");
+    // Use absolute path based on CARGO_MANIFEST_DIR or fallback to relative path
+    let static_dir = if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
+        PathBuf::from(manifest_dir).parent().unwrap().join("web/admin-spa/dist")
+    } else {
+        // Fallback: try to detect from executable location
+        let exe_path = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("."));
+        exe_path.parent().and_then(|p| p.parent()).map(|p| p.join("web/admin-spa/dist"))
+            .unwrap_or_else(|| PathBuf::from("../web/admin-spa/dist"))
+    };
+
+    // SPA fallback: serve index.html for all unmatched routes
+    let index_path = static_dir.join("index.html");
     let serve_dir = ServeDir::new(&static_dir)
-        .not_found_service(ServeDir::new(&static_dir).append_index_html_on_directories(true));
+        .not_found_service(ServeFile::new(&index_path));
 
     info!("📁 Static files serving from: {}", static_dir.display());
 
+    // Verify static directory exists
+    if !static_dir.exists() {
+        error!("⚠️  Static directory does not exist: {}", static_dir.display());
+        error!("⚠️  Frontend UI will not be available!");
+    } else {
+        info!("✅ Static directory verified: {}", static_dir.display());
+    }
+
+    // Prepare favicon file service
+    let favicon_path = static_dir.join("favicon.ico");
+    let serve_favicon = ServeFile::new(&favicon_path);
+
     // Build router
     let app = Router::new()
+        .route("/", get(|| async { Redirect::permanent("/admin-next") })) // Redirect root to admin
+        .route("/favicon.ico", get_service(serve_favicon))
         .route("/health", get(health_check))
         .route("/ping", get(ping))
         .with_state(health_state)
-        .nest("/admin", create_admin_routes(admin_service.clone()))
-        .nest("/web", create_admin_routes(admin_service)) // For frontend compatibility
-        .nest("/", create_api_router(api_state))
-        .nest("/", create_gemini_router(gemini_state))
+        .nest(
+            "/admin",
+            create_admin_routes(admin_service.clone(), api_key_service.clone(), redis.clone()),
+        )
+        .nest(
+            "/web",
+            create_admin_routes(admin_service, api_key_service, redis.clone()),
+        ) // For frontend compatibility
+        .nest("/api", create_api_router(api_state.clone()))
+        .nest("/claude", create_api_router(api_state))
+        .nest("/gemini", create_gemini_router(gemini_state))
         .nest("/openai", create_openai_router(openai_state))
         .nest_service("/admin-next", serve_dir); // Serve Vue SPA
 

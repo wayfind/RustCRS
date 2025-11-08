@@ -149,9 +149,7 @@ Backend should display after startup:
 ✅ Redis connected
 ```
 
-### 3. Start Frontend Interface
-
-Open a **new terminal window**:
+### 3. Build Frontend (First-time only)
 
 ```bash
 cd web/admin-spa/
@@ -159,11 +157,13 @@ cd web/admin-spa/
 # First-time setup: install dependencies
 npm install
 
-# Start development server
-npm run dev
+# Build frontend assets
+npm run build
 ```
 
-Vite will automatically open browser at `http://localhost:3001`
+Frontend assets will be built to `dist/` directory and served by Rust backend at port 8080.
+
+**访问地址**: `http://localhost:8080` 或 `http://localhost:8080/admin-next` (根路径自动跳转到 `/admin-next`)
 
 ---
 
@@ -186,7 +186,10 @@ curl http://localhost:8080/health
 
 ### Frontend Access
 
-Open browser: **http://localhost:3001**
+Open browser: **http://localhost:8080** (统一端口)
+
+- 访问根路径 `/` 会自动跳转到 `/admin-next`
+- 可直接访问 `http://localhost:8080/admin-next`
 
 You should see the Claude Relay Service admin interface.
 
@@ -198,9 +201,8 @@ You should see the Claude Relay Service admin interface.
 
 | Command | Starts | Use Case | Time |
 |---------|--------|----------|------|
-| `cargo run` | **Backend only** | Backend development, API testing | ~2s |
-| `make rust-backend` | **Backend only** | Same as cargo run | ~2s |
-| `make rust-frontend` | **Frontend only** | Frontend development (backend must be running) | ~5s |
+| `cargo run` | **Backend + Frontend** | Full stack development (port 8080) | ~2s |
+| `make rust-backend` | **Backend + Frontend** | Same as cargo run | ~2s |
 | `make rust-dev` | **Complete environment** | Redis + Backend + Frontend (recommended) | ~15s |
 | `make start-all` | **Complete environment** | Same as rust-dev | ~15s |
 | `bash rust-dev.sh` | **Complete environment** | Interactive startup with options | ~15s |
@@ -212,33 +214,32 @@ You should see the Claude Relay Service admin interface.
 | Feature | `cargo run` | `make rust-dev` |
 |---------|------------|----------------|
 | Redis | ❌ Manual start required | ✅ Auto-starts |
-| Backend | ✅ Starts | ✅ Starts |
-| Frontend | ❌ Not started | ✅ Optional start |
+| Backend | ✅ Starts (port 8080) | ✅ Starts |
+| Frontend | ✅ Served from dist/ | ✅ Served from dist/ |
 | Environment Check | ❌ None | ✅ Auto-checks |
-| Best For | Backend development | Complete environment |
+| Best For | Quick development | Complete environment |
 
 ### When to Use Each Method
 
 | Scenario | Recommended Command | Reason |
 |----------|-------------------|---------|
-| Pure backend development | `cargo run` | Fastest, focused on backend |
-| Pure frontend development | `make rust-frontend` | Frontend hot reload |
-| Frontend + backend testing | `make rust-dev` | Complete environment, automated |
+| Quick development | `cargo run` | Fastest startup, unified port 8080 |
+| Full stack development | `make rust-dev` | Complete environment, automated |
 | First-time setup | `make rust-dev` | One-command startup, interactive |
 | Quick testing | `bash rust-dev.sh` | Scripted, customizable |
 | Production deployment | `make rust-release` | Performance optimized |
 
 ### Important Notes
 
-**⚠️ Why `cargo run` doesn't start frontend?**
-- Backend and frontend are separate concerns
-- Allows backend development without frontend overhead
-- Frontend can hot reload independently
-- Follows Cargo's design philosophy (managing Rust projects only)
+**✅ Unified Port Architecture**
+- Frontend and backend now run on single port **8080**
+- Frontend static files served from `web/admin-spa/dist/`
+- No separate Vite dev server needed
+- Simplified development and deployment workflow
 
-**For complete environment**, use:
+**For complete environment with Redis**, use:
 ```bash
-make rust-dev           # Recommended
+make rust-dev           # Recommended (includes Redis)
 make start-all         # Same as above
 bash rust-dev.sh       # Interactive
 ```
@@ -247,7 +248,9 @@ bash rust-dev.sh       # Interactive
 
 ## 🎨 Using the Admin Interface
 
-Visit `http://localhost:3001` to access the admin interface.
+**访问地址**: `http://localhost:8080` 或 `http://localhost:8080/admin-next`
+- 统一端口 8080，前后端集成
+- 根路径 `/` 自动跳转到 `/admin-next`
 
 ### 1. Login to Admin Interface
 
@@ -312,26 +315,29 @@ cat .env | grep ENCRYPTION_KEY
 Error: "Address already in use (os error 98)"
 
 # Check port usage:
-lsof -i :8080  # Rust backend
-lsof -i :3001  # Frontend
+lsof -i :8080  # Rust backend (frontend + backend unified)
 lsof -i :6379  # Redis
 
 # Kill occupying process:
 kill -9 <PID>
 ```
 
-### ❌ Frontend Cannot Connect to Backend
+### ❌ Frontend Not Loading
 
 ```bash
 # Confirm backend is running
 curl http://localhost:8080/health
 
-# Check frontend proxy configuration (should point to localhost:8080)
-cat web/admin-spa/vite.config.js | grep apiTarget
+# Verify frontend assets are built
+ls -la web/admin-spa/dist/
 
-# Restart frontend
+# If dist/ is empty, build frontend:
 cd web/admin-spa/
-npm run dev
+npm run build
+
+# Restart backend
+cd ../../rust/
+cargo run
 ```
 
 ### ❌ JWT_SECRET Error
@@ -387,11 +393,13 @@ cargo watch -x run
 
 **Frontend Development**:
 ```bash
-# Backend running in background
-make rust-backend  # Choose option 2 (background)
+# Build frontend assets
+cd web/admin-spa/
+npm run build
 
-# Frontend with hot reload
-make rust-frontend
+# Run backend (serves frontend from dist/)
+cd ../../rust/
+cargo run
 ```
 
 **Full Testing**:
@@ -430,8 +438,9 @@ npm run data:debug    # Redis data debugging
 
 - [ ] Environment configured (`.env` file created)
 - [ ] Redis running (`docker ps | grep redis-dev`)
+- [ ] Frontend built (`ls web/admin-spa/dist/`)
 - [ ] Backend healthy (`curl http://localhost:8080/health`)
-- [ ] Frontend accessible (`http://localhost:3001`)
+- [ ] Admin UI accessible (`http://localhost:8080`)
 - [ ] Admin login successful
 - [ ] Test account added
 - [ ] API Key created
