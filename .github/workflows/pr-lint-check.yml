@@ -57,12 +57,18 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci --prefer-offline --no-audit
-          # 安装 web 目录的依赖（如果存在）
+          # 安装 web 目录的依赖
           if [ -d "web/admin-spa" ] && [ -f "web/admin-spa/package.json" ]; then
+            echo "📦 Installing frontend dependencies..."
             cd web/admin-spa
             npm ci --prefer-offline --no-audit
             cd ../..
+          fi
+
+          # 安装根目录的依赖（如果存在）
+          if [ -f "package.json" ]; then
+            echo "📦 Installing root dependencies..."
+            npm ci --prefer-offline --no-audit
           fi
 
       - name: Get changed files
