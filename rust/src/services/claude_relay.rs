@@ -288,8 +288,8 @@ impl ClaudeRelayService {
 
         // 设置 User-Agent (Claude Console 需要特定的值)
         let user_agent = if account.platform == Platform::ClaudeConsole {
-            debug!("Setting User-Agent to 'claude_code' for Claude Console");
-            "claude_code"  // Claude Console requires this exact User-Agent
+            debug!("Setting User-Agent to 'claude-cli/1.0.69 (external, cli)' for Claude Console");
+            "claude-cli/1.0.69 (external, cli)"  // Claude Console requires Claude CLI User-Agent format
         } else {
             debug!("Setting User-Agent to 'claude-relay-service/1.0' for platform: {:?}", account.platform);
             "claude-relay-service/1.0"  // Default for other platforms
@@ -647,9 +647,9 @@ impl ClaudeRelayService {
             .header("anthropic-version", &config.api_version)
             .header("x-api-key", access_token);
 
-        // 设置 User-Agent (Claude Console 需要特定的值，必须为 "claude_code")
+        // 设置 User-Agent (Claude Console 需要特定的值，必须为 Claude CLI 格式)
         let user_agent = if account.platform == Platform::ClaudeConsole {
-            "claude_code"  // Claude Console enforces allowedClients=["claude_code"]
+            "claude-cli/1.0.69 (external, cli)"  // Claude Console requires Claude CLI User-Agent format
         } else {
             "claude-relay-service/1.0"  // Default for other platforms
         };
