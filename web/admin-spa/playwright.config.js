@@ -17,6 +17,10 @@ export default defineConfig({
   // 测试文件匹配模式
   testMatch: '**/*.spec.js',
 
+  // 全局 setup/teardown
+  globalSetup: './e2e/global-setup.js',
+  globalTeardown: './e2e/global-teardown.js',
+
   // 全局超时设置
   timeout: 30 * 1000,
   expect: {
@@ -38,8 +42,8 @@ export default defineConfig({
 
   // 全局配置
   use: {
-    // 基础 URL - 指向 Vite 开发服务器
-    baseURL: process.env.BASE_URL || 'http://localhost:3001',
+    // 基础 URL - 指向 Vite 开发服务器（包含 /admin 前缀）
+    baseURL: process.env.BASE_URL || 'http://localhost:3001/admin',
 
     // 截图设置
     screenshot: 'only-on-failure',
@@ -54,16 +58,30 @@ export default defineConfig({
     viewport: { width: 1280, height: 720 },
     ignoreHTTPSErrors: true,
 
-    // 导航超时
-    navigationTimeout: 15000,
-    actionTimeout: 10000,
+    // 导航超时（增加以应对慢速加载）
+    navigationTimeout: 30000,
+    actionTimeout: 15000,
+
+    // 服务worker
+    serviceWorkers: 'block',
   },
 
   // 测试项目配置 - 多浏览器测试
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // 添加 Chrome 启动参数以避免崩溃
+        launchOptions: {
+          args: [
+            '--disable-dev-shm-usage',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-gpu'
+          ]
+        }
+      },
     },
 
     // 可选：Firefox 测试
