@@ -5,6 +5,7 @@ pub mod error;
 pub mod http_client;
 pub mod logger;
 pub mod model_helper;
+pub mod prompt_similarity;
 pub mod session_helper;
 
 pub use cost_calculator::{
