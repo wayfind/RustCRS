@@ -20,11 +20,16 @@
 /// Reference: nodejs-archive/src/utils/contents.js
 
 pub mod algorithm;
+pub mod matcher;
 pub mod normalizer;
 pub mod templates;
 
 // Re-export commonly used items
 pub use algorithm::{calculate_similarity, dice_coefficient, SimilarityResult};
+pub use matcher::{
+    check_prompt_similarity, get_all_scores, get_best_match, is_claude_code_prompt, BestMatch,
+    MatchResult, TemplateScore,
+};
 pub use normalizer::{collapse_whitespace, normalize_text, PLACEHOLDER_TOKEN};
 pub use templates::{
     get_all_templates, get_template_by_id, get_templates_by_category, PromptCategory,

@@ -84,11 +84,13 @@ const CLAUDE_CODE_AGENT_SDK: PromptTemplate = PromptTemplate::new(
 );
 
 /// Claude Code compact system prompt
+///
+/// Note: This template is more specific to avoid false positives with generic assistant prompts
 const CLAUDE_CODE_COMPACT: PromptTemplate = PromptTemplate::new(
     "claude_code_compact",
     "Claude Code Compact System Prompt",
     PromptCategory::System,
-    "You are a helpful AI assistant tasked with summarizing conversations.",
+    "You are Claude, tasked with summarizing conversations from Claude Code sessions.",
 );
 
 /// All Claude Code system prompt templates
@@ -262,8 +264,9 @@ mod tests {
     #[test]
     fn test_compact_template() {
         let compact = get_template_by_id("claude_code_compact").unwrap();
-        assert!(compact.text.contains("helpful AI assistant"));
+        assert!(compact.text.contains("Claude"));
         assert!(compact.text.contains("summarizing conversations"));
+        assert!(compact.text.contains("Claude Code sessions"));
     }
 
     #[test]
